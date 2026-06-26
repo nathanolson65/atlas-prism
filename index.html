@@ -823,6 +823,13 @@ const cfg = Object.assign({
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
 if(cfg.bridgeUrl === 'http://localhost:8124') cfg.bridgeUrl = '';
 function saveCfg(){ LS.set('cfg', cfg); }
+/* On the DEPLOYED site (not localhost) default the YouTube bridge to the operator's tunnelled PC bridge
+   so YouTube full-song search works on the phone. Respects a user-set custom bridge; auto-updates the
+   baked URL across deploys via cfg._autoBridge. (Locally the bridge stays same-origin / blank.) */
+const DEFAULT_BRIDGE = 'https://subsequently-determination-feels-album.trycloudflare.com';
+if(!/^(localhost$|127\.|0\.0\.0\.0$)/.test(location.hostname) && (!cfg.bridgeUrl || cfg.bridgeUrl === cfg._autoBridge)){
+  cfg.bridgeUrl = DEFAULT_BRIDGE; cfg._autoBridge = DEFAULT_BRIDGE; saveCfg();
+}
 
 const PALETTES = [
   { name:'Spectrum',     hues:null },
@@ -3785,7 +3792,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   let hadController = !!navigator.serviceWorker.controller;

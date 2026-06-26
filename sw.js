@@ -1,5 +1,10 @@
 /* ATLAS Prism — cache-first service worker */
-const CACHE = 'atlas-prism-v41';
+const CACHE = 'atlas-prism-v42';
+/* v42 YOUTUBE-ON-MOBILE: the deployed site now defaults its YouTube bridge to the operator's tunnelled
+   PC bridge (DEFAULT_BRIDGE in index.html) so YouTube full-song search works on the installed phone app
+   whenever the PC + tunnel are running. Public Piped/Invidious instances were tested and can't extract
+   audio (YouTube blocks datacenter IPs), so a residential-IP bridge (your PC, exposed via a tunnel) is the
+   only reliable free path. Respects a user-set custom bridge in Settings; auto-updates across deploys. */
 /* v41 STATIC-HOST DEPLOY: relative asset paths (manifest start_url './', SW ASSETS './…', offline
    fallback './index.html') so the PWA installs correctly under a subpath (e.g. <user>.github.io/atlas-prism/)
    as well as at localhost root. No visual changes — v40 feature set. On a static host the YouTube bridge is
