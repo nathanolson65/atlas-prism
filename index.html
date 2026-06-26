@@ -1017,23 +1017,27 @@ function drawPrism(tt){
   const cx = W/2, cy = H/2, R = Math.min(W,H);
   upBeam(cx, cy);
 
-  // dense radiating beams, each strung with lattice nodes (the bright web)
-  const total = Math.floor((24 + speed * 16) * manualDensity * dQ);
+  // dense radiating rainbow beams, each strung with lattice nodes (the bright sunburst web).
+  // Density-wired: the Density slider scales the beam + ring count; the FPS governor (dQ) thins it on mobile.
+  const D = Math.max(0.35, manualDensity * dQ);
+  const total = Math.floor((48 + speed * 30) * manualDensity * dQ);
+  const ndot = D > 1.2 ? 2 : 3;
   for(let i = 0; i < total; i++){
     const ang = (i/total) * 6.2832 + tt*speed*0.3 + Math.sin(tt*1.1 + i*0.4)*0.12;
     const len = (R*0.5 + Math.sin(tt*2 + i)*60) * pulse * (1 + fBands[i % NBANDS]*0.9);   // SOTA #2: per-beam frequency
     const h   = i*(360/total) + tt*20 + hueShift;
     const a   = (0.30 + Math.sin(tt*3 + i*0.7)*0.18) * brightness + 0.1;
-    seg(cx, cy, cx + Math.cos(ang)*len, cy + Math.sin(ang)*len, h, a, 1.5*pulse);
-    for(let k = 1; k <= 4; k++){
-      const f = k/4.2;
+    seg(cx, cy, cx + Math.cos(ang)*len, cy + Math.sin(ang)*len, h, a, 1.2*pulse);
+    for(let k = 1; k <= ndot; k++){
+      const f = k/(ndot + 0.2);
       dot(cx + Math.cos(ang)*len*f, cy + Math.sin(ang)*len*f, (1 + fBands[i % NBANDS]*2.4)*pulse, h + k*10, a*0.9);
     }
   }
 
   // nested rotating polygon rings -> concentric depth
-  for(let r = 1; r <= 5; r++){
-    const rad = R*0.085*r*pulse, sides = 5 + r, rot = r + tt*speed*(0.22 - r*0.025), h = r*55 + tt*18 + hueShift;
+  const rings = Math.max(5, Math.round(9 * D));
+  for(let r = 1; r <= rings; r++){
+    const rad = R*0.075*r*pulse, sides = 5 + r, rot = r + tt*speed*(0.22 - r*0.025), h = r*55 + tt*18 + hueShift;
     let px, py;
     for(let s = 0; s <= sides; s++){
       const aa = rot + s/sides*6.2832, x = cx + Math.cos(aa)*rad, y = cy + Math.sin(aa)*rad;
@@ -1077,13 +1081,15 @@ function tesseractShell(tt, scale, hueOff){
 
 function drawTesseract(tt){
   upBeam(W/2, H/2);
-  // five nested hypercube shells -> deep "cube within a cube" lattice
+  // nested hypercube shells -> deep "cube within a cube" lattice. Density-wired: more shells = denser
+  // nested wireframe; the Density slider scales it, the FPS governor (dQ) thins it on mobile.
   const base = Math.min(W,H) * 1.7 * pulse;
-  tesseractShell(tt, base * 1.25, 0);
-  tesseractShell(tt, base * 0.95, 50);
-  tesseractShell(tt, base * 0.68, 110);
-  tesseractShell(tt, base * 0.45, 180);
-  tesseractShell(tt, base * 0.26, 250);
+  const D = Math.max(0.35, manualDensity * dQ);
+  const nsh = Math.max(3, Math.round(9 * D));
+  for(let s = 0; s < nsh; s++){
+    const f = nsh > 1 ? s/(nsh-1) : 0;              // 0 (outer) -> 1 (inner)
+    tesseractShell(tt, base * (1.28 - f*1.05), f*330);   // scale outer->inner, rainbow hue offset across shells
+  }
 }
 
 function drawKaleidoscope(tt){
@@ -1205,24 +1211,31 @@ function drawMetatron(tt){
 
 // Merkaba — two interlocking tetrahedra rotating in 3D
 function drawMerkaba(tt){
-  const cx = W/2, cy = H/2, R = Math.min(W,H), s = R*0.34*pulse;
+  const cx = W/2, cy = H/2, R = Math.min(W,H), s0 = R*0.34*pulse;
   upBeam(cx, cy);
-  const ay = tt*0.5, ax = tt*0.32, cay = Math.cos(ay), say = Math.sin(ay), cax = Math.cos(ax), sax = Math.sin(ax);
-  const proj = (v) => {
-    const x = v[0], y = v[1], z = v[2];
-    const x1 = x*cay - z*say, z1 = x*say + z*cay;
-    const y1 = y*cax - z1*sax, z2 = y*sax + z1*cax;
-    const p = 2.6 / (2.6 + z2);
-    return [cx + x1*p*s, cy + y1*p*s];
-  };
-  const t1 = [[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]].map(proj);
-  const t2 = [[-1,-1,-1],[-1,1,1],[1,-1,1],[1,1,-1]].map(proj);
-  const tet = (t, ho) => {
-    for(let i = 0; i < 4; i++) for(let j = i+1; j < 4; j++)
-      seg(t[i][0], t[i][1], t[j][0], t[j][1], ho + tt*25 + hueShift, 0.5*brightness + 0.12, 1.6*pulse);
-    t.forEach((p, k) => dot(p[0], p[1], 2.4*pulse, ho + k*20 + tt*25 + hueShift, 0.6*brightness + 0.25));
-  };
-  tet(t1, 0); tet(t2, 180);
+  // nested counter-rotating star-tetrahedra. Density-wired: more layers = denser layered star;
+  // Density slider scales it, the FPS governor (dQ) thins it on mobile.
+  const D = Math.max(0.35, manualDensity * dQ);
+  const nsh = Math.max(2, Math.round(7 * D));
+  for(let sh = 0; sh < nsh; sh++){
+    const s = s0 * (1 - sh * (0.62 / nsh));                 // each layer slightly smaller (nested)
+    const ay = tt*0.5 + sh*0.34, ax = tt*0.32 - sh*0.22;    // each layer rotated differently → woven depth
+    const cay = Math.cos(ay), say = Math.sin(ay), cax = Math.cos(ax), sax = Math.sin(ax);
+    const proj = (v) => { const x = v[0], y = v[1], z = v[2];
+      const x1 = x*cay - z*say, z1 = x*say + z*cay;
+      const y1 = y*cax - z1*sax, z2 = y*sax + z1*cax;
+      const p = 2.6 / (2.6 + z2);
+      return [cx + x1*p*s, cy + y1*p*s]; };
+    const t1 = [[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]].map(proj);
+    const t2 = [[-1,-1,-1],[-1,1,1],[1,-1,1],[1,1,-1]].map(proj);
+    const ho = sh*55;
+    const tet = (t, o) => {
+      for(let i = 0; i < 4; i++) for(let j = i+1; j < 4; j++)
+        seg(t[i][0], t[i][1], t[j][0], t[j][1], o + ho + tt*25 + hueShift, 0.5*brightness + 0.12, 1.2*pulse);
+      if(sh === 0) t.forEach((p, k) => dot(p[0], p[1], 2.4*pulse, o + k*20 + tt*25 + hueShift, 0.6*brightness + 0.25));
+    };
+    tet(t1, 0); tet(t2, 180);
+  }
 }
 
 // Sri Yantra — interlocking triangles, bindu, lotus ring
@@ -1249,23 +1262,26 @@ function drawSri(tt){
   ctx.beginPath(); ctx.arc(cx, cy, pr*0.97, 0, 6.2832); ctx.stroke();
 }
 
-// Torus — rotating 3D donut of rings (energy field)
+// Torus — rotating 3D donut of fine rainbow rings (energy field). Density-wired: high ring/segment
+// count → the dense woven wireframe look; the Density slider scales it, the FPS governor (dQ) thins it on mobile.
 function drawTorus(tt){
   const cx = W/2, cy = H/2, R = Math.min(W,H), Rr = R*0.32*pulse, rr = R*0.13*pulse;
   const ax = tt*0.4 + 0.6, cax = Math.cos(ax), sax = Math.sin(ax);
-  const ringsN = 18, segN = 22;
+  const D = Math.max(0.35, manualDensity * dQ);
+  const ringsN = Math.max(8, Math.round(46 * D)), segN = Math.max(12, Math.round(40 * D));
+  // precompute the poloidal circle so the inner loop is cheap even at high density
+  const cv = [], sv = [];
+  for(let j = 0; j <= segN; j++){ const v = j/segN*6.2832; cv.push(Math.cos(v)); sv.push(Math.sin(v)); }
+  // poloidal rings (the donut's cross-section circles)
   for(let i = 0; i < ringsN; i++){
-    const u = i/ringsN*6.2832 + tt*speed*0.2, h = i*20 + tt*22 + hueShift;
+    const u = i/ringsN*6.2832 + tt*speed*0.2, cu = Math.cos(u), su = Math.sin(u), h = i/ringsN*720 + tt*22 + hueShift;
     let px, py, first = true;
     for(let j = 0; j <= segN; j++){
-      const v = j/segN*6.2832;
-      const x = (Rr + rr*Math.cos(v))*Math.cos(u);
-      const y = rr*Math.sin(v);
-      const z = (Rr + rr*Math.cos(v))*Math.sin(u);
+      const rc = Rr + rr*cv[j];
+      const x = rc*cu, y = rr*sv[j], z = rc*su;
       const y1 = y*cax - z*sax, z1 = y*sax + z*cax;
-      const p = 2.4 / (2.4 + z1/R);
-      const X = cx + x*p, Y = cy + y1*p;
-      if(!first) seg(px, py, X, Y, h, 0.4*brightness + 0.12, 1.3*pulse);
+      const p = 2.4 / (2.4 + z1/R), X = cx + x*p, Y = cy + y1*p;
+      if(!first) seg(px, py, X, Y, h, 0.38*brightness + 0.12, 1.0*pulse);
       px = X; py = Y; first = false;
     }
   }
@@ -4031,7 +4047,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
