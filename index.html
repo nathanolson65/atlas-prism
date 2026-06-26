@@ -677,6 +677,7 @@ body.reduce .livedot{animation:none;}
       <div class="row" id="blendRow5"><label>2nd pattern hue shift <span class="sub">(°)</span></label><input type="range" class="prng" id="setBlendHue" min="0" max="360" value="60"></div>
       <div class="row" id="blendRow6"><label>Color mix mode <span class="sub">(how the two patterns' colors combine)</span></label><select class="sel" id="setBlendComp"><option value="source-over">Overlay</option><option value="screen">Screen (mix)</option><option value="lighter">Add (glow-mix)</option></select></div>
       <div class="row" id="blendRow7"><label>2nd pattern reverse spin <span class="sub">(the overlay counter-rotates against the main pattern)</span></label><div class="sw" id="swBlendReverse"></div></div>
+      <div class="row" id="blendRow8"><label>2nd pattern size <span class="sub">(smaller = nested INSIDE for a tesseract depth effect; 100 = same size)</span></label><input type="range" class="prng" id="setBlendScale" min="25" max="100" value="55"></div>
       <div class="row"><label>Auto-cycle modes</label><div class="sw" id="swCycle"></div></div>
       <div class="row"><label>Auto-cycle every <span class="sub">(minutes)</span></label><input type="range" class="prng" id="setCycleMins" min="1" max="10" value="1"></div>
       <div class="row"><label>Auto-VJ on drops <span class="sub">(auto-switch pattern on the beat-drop)</span></label><div class="sw" id="swAutoVJ"></div></div>
@@ -848,7 +849,7 @@ const cfg = Object.assign({
   palette:0, mono:false, symmetry:1, autocycle:false, strobe:false, camera:false,
   haptics:true, wake:false, autohide:false, big:false, reduce:false, lang:'en', jamendoKey:'',
   bridgeUrl:'', refract:true, transitions:true, blend:false, blendMode:'aurora', blendMix:50,
-  sat:100, light:62, blendPalette:2, blendHue:60, blendComp:'source-over', blendReverse:true, customHue:300, customSpread:140, particles:true, feedback:false, shockwave:false, filmgrain:false, beamburst:false,
+  sat:100, light:62, blendPalette:2, blendHue:60, blendComp:'source-over', blendReverse:true, blendScale:55, customHue:300, customSpread:140, particles:true, feedback:false, shockwave:false, filmgrain:false, beamburst:false,
   pyramid:false, trail:30, pyramidSpin:false, pyramidSides:4, cycleMins:1, transMs:420,
   autoVJ:false, spinSpeed:25, playRate:100, lfo:false, adaptiveQ:true, showFps:false,
   // SOTA Wave 5 (free-canvas) — all default OFF
@@ -3278,6 +3279,8 @@ function loop(){
       ctx.save();
       ctx.globalAlpha = Math.max(0.05, Math.min(0.95, cfg.blendMix / 100));
       if(cfg.blendComp && cfg.blendComp !== 'source-over') ctx.globalCompositeOperation = cfg.blendComp;
+      const _bs = (cfg.blendScale || 100) / 100;                // channel B size: <1 nests it INSIDE the main pattern (tesseract-style depth)
+      if(_bs !== 1){ ctx.translate(W/2, H/2); ctx.scale(_bs, _bs); ctx.translate(-W/2, -H/2); }
       _palIdx = cfg.blendPalette; _palHueOff = cfg.blendHue;     // channel B: its own palette + hue
       _rt = cfg.blendReverse ? -t : t;                          // channel B: REVERSE spin (runs time backward) when enabled
       drawOne(draws[cfg.blendMode]);
@@ -3752,6 +3755,7 @@ bindSw('swTrans', 'transitions');
 bindRange('setTransMs', 'transMs');
 bindSw('swBlend', 'blend', () => updateBlendUI());
 bindSw('swBlendReverse', 'blendReverse');
+bindRange('setBlendScale', 'blendScale');
 bindRange('setBlendMix', 'blendMix');
 bindRange('setTrail', 'trail');
 bindSw('swPyramid', 'pyramid');
@@ -3768,7 +3772,7 @@ function applyCubePreset(){
   toast('Cube projection preset — dark room + max brightness for the glass cube', 'ok'); haptic();
 }
 $('cubePreset').addEventListener('click', applyCubePreset);
-function updateBlendUI(){ const on = !!cfg.blend; ['blendRow2','blendRow3','blendRow4','blendRow5','blendRow6','blendRow7'].forEach(id => { const el = $(id); if(el) el.style.display = on ? '' : 'none'; }); }
+function updateBlendUI(){ const on = !!cfg.blend; ['blendRow2','blendRow3','blendRow4','blendRow5','blendRow6','blendRow7','blendRow8'].forEach(id => { const el = $(id); if(el) el.style.display = on ? '' : 'none'; }); }
 (function(){ const sel = $('setBlendMode'); if(!sel) return;
   MODE_CLASSES.forEach(cl => { const og = document.createElement('optgroup'); og.label = cl.name;
     cl.modes.forEach(([id,, label]) => { const o = document.createElement('option'); o.value = id; o.textContent = label; og.appendChild(o); });
@@ -3964,7 +3968,7 @@ window.addEventListener('offline', () => { updateOnline(); toast('Offline — se
 function applyCfgToUI(){
   document.body.classList.toggle('big', cfg.big);
   document.body.classList.toggle('reduce', cfg.reduce);
-  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed']]
+  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
   [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
@@ -4027,7 +4031,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
