@@ -1,5 +1,11 @@
 /* ATLAS Prism — cache-first service worker */
-const CACHE = 'atlas-prism-v42';
+const CACHE = 'atlas-prism-v43';
+/* v43 SEARCH GLITCH FIX: doSearch() rewritten — (1) a generation guard so a stale/superseded search can
+   no longer wipe a good result list (this caused YouTube results to flash then vanish to "no matches");
+   (2) PROGRESSIVE render — each engine's results appear as they arrive, Audius/Archive instantly while the
+   remote YouTube bridge resolves (with a "Searching more…" note), and "No matches" shows only after ALL
+   engines settle; (3) YouTube timeout raised 8s→22s for the tunnelled bridge; (4) the full-only filter now
+   keeps any full source (incl. YouTube), not just Audius. */
 /* v42 YOUTUBE-ON-MOBILE: the deployed site now defaults its YouTube bridge to the operator's tunnelled
    PC bridge (DEFAULT_BRIDGE in index.html) so YouTube full-song search works on the installed phone app
    whenever the PC + tunnel are running. Public Piped/Invidious instances were tested and can't extract

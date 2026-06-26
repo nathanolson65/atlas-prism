@@ -2782,61 +2782,63 @@ function renderLinks(term){
   });
 }
 
+let searchGen = 0;   // stale-search guard: only the LATEST search may touch the results DOM
 async function doSearch(term){
   if(!term) return;
   term = parseQuery(term);                                    // accept pasted song links
   if(!enabledEngines) enabledEngines = new Set(ENGINES.map(e => e.id));
-  // search history
+  const myGen = ++searchGen;
   searchHistory = [term, ...searchHistory.filter(q => q.toLowerCase() !== term.toLowerCase())].slice(0, 8);
   LS.set('history', searchHistory); renderHistory();
   renderLinks(term);
   searchResults.innerHTML = '';
   searchResults.appendChild(linksEl);
-  const active = ENGINES.filter(e => enabledEngines.has(e.id));   // every engine is a full-song source now
-  // loading skeletons
-  for(let i = 0; i < 4; i++){
-    const sk = document.createElement('div'); sk.className = 'sp-row'; sk.style.opacity = '.4';
-    sk.innerHTML = '<span class="sp-art"></span><span class="sp-info"><span class="sp-title">Searching…</span><span class="sp-artist">' + active.map(e => e.label).join(' · ') + '</span></span>';
-    searchResults.appendChild(sk);
-  }
-
-  const settled = await Promise.allSettled(active.map(e => withTimeout(e.search(term), 8000)));
-
+  const active = ENGINES.filter(e => enabledEngines.has(e.id));
   const map = new Map();
-  settled.forEach(res => {
-    if(res.status !== 'fulfilled') return;
-    res.value.forEach(r => {
-      const key = norm(r.title) + '|' + norm(r.artist);
-      if(!key.replace('|', '').trim()) return;
-      if(map.has(key)){
-        const ex = map.get(key);
-        if(!ex.sources.includes(r.source)) ex.sources.push(r.source);
-        if(!ex.previews[r.source]) ex.previews[r.source] = r.preview;
-        if(!ex.art && r.art) ex.art = r.art;
-      } else {
-        map.set(key, { title:r.title, artist:r.artist, album:r.album, art:r.art,
-          sources:[r.source], previews:{ [r.source]: r.preview } });
-      }
-    });
+  let pending = active.length;
+  const mergeRow = (r) => {
+    const key = norm(r.title) + '|' + norm(r.artist);
+    if(!key.replace('|', '').trim()) return;
+    if(map.has(key)){
+      const ex = map.get(key);
+      if(!ex.sources.includes(r.source)) ex.sources.push(r.source);
+      if(!ex.previews[r.source]) ex.previews[r.source] = r.preview;
+      if(!ex.art && r.art) ex.art = r.art;
+    } else {
+      map.set(key, { title:r.title, artist:r.artist, album:r.album, art:r.art, sources:[r.source], previews:{ [r.source]: r.preview } });
+    }
+  };
+  // progressive render — called as each engine resolves; a superseded search no-ops (no flash/clear glitch)
+  const render = () => {
+    if(myGen !== searchGen) return;
+    searchResults.querySelectorAll('.sp-row, .sp-msg').forEach(n => n.remove());   // keep the "Find on" links bar
+    let rows = [...map.values()];
+    if(fullOnly) rows = rows.filter(r => r.sources.some(s => FULL_SRC[s]));         // full-track-only (any full source, incl. YouTube)
+    const qTokens = norm(term).split(' ').filter(Boolean);
+    rows.forEach(r => { r._score = relevance(r, qTokens); });
+    if(sortMode === 'title')       rows.sort((a, b) => a.title.localeCompare(b.title));
+    else if(sortMode === 'artist') rows.sort((a, b) => (a.artist||'').localeCompare(b.artist||'') || a.title.localeCompare(b.title));
+    else if(sortMode === 'source') rows.sort((a, b) => b.sources.length - a.sources.length || b._score - a._score);
+    else                           rows.sort((a, b) => b._score - a._score);
+    rows.forEach(r => searchResults.appendChild(makeRow(r)));
+    if(pending > 0){                                                                // still waiting on slower engines (e.g. YouTube via the bridge)
+      const s = document.createElement('div'); s.className = 'sp-msg'; s.style.opacity = '.65';
+      s.innerHTML = rows.length ? 'Searching more… <span style="opacity:.7">(YouTube can take a few seconds)</span>'
+                                : 'Searching <b>' + active.map(e => e.label).join(' · ') + '</b>…';
+      searchResults.appendChild(s);
+    } else if(!rows.length){
+      const m = document.createElement('div'); m.className = 'sp-msg';
+      m.innerHTML = 'No matches in the active catalogs. Toggle more engines, use a “Find on” link above, or <b>Load file</b>.';
+      searchResults.appendChild(m);
+    }
+  };
+  render();                                                                          // initial "Searching…" state
+  active.forEach(e => {
+    withTimeout(e.search(term), e.id === 'youtube' ? 22000 : 9000)                   // YouTube bridge (remote/tunnel + yt-dlp) needs longer
+      .then(list => { if(myGen !== searchGen) return; (list || []).forEach(mergeRow); })
+      .catch(() => {})
+      .finally(() => { if(myGen !== searchGen) return; pending--; render(); });
   });
-
-  searchResults.querySelectorAll('.sp-row').forEach(n => n.remove());   // clear skeletons
-  let rows = [...map.values()];
-  if(fullOnly) rows = rows.filter(r => r.sources.includes('audius'));   // full-track-only filter
-  const qTokens = norm(term).split(' ').filter(Boolean);
-  rows.forEach(r => { r._score = relevance(r, qTokens); });
-  if(sortMode === 'title')       rows.sort((a, b) => a.title.localeCompare(b.title));
-  else if(sortMode === 'artist') rows.sort((a, b) => (a.artist||'').localeCompare(b.artist||'') || a.title.localeCompare(b.title));
-  else if(sortMode === 'source') rows.sort((a, b) => b.sources.length - a.sources.length || b._score - a._score);
-  else                           rows.sort((a, b) => b._score - a._score);
-  if(!rows.length){
-    const m = document.createElement('div');
-    m.className = 'sp-msg';
-    m.innerHTML = 'No matches in the active catalogs. Toggle more engines, use a “Find on” link above, or <b>Load file</b>.';
-    searchResults.appendChild(m);
-    return;
-  }
-  rows.forEach(r => searchResults.appendChild(makeRow(r)));
 }
 
 function makeRow(r){
@@ -3792,7 +3794,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   let hadController = !!navigator.serviceWorker.controller;
