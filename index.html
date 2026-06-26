@@ -390,6 +390,18 @@ button,.pill{
 /* strobe overlay */
 #strobe{position:fixed;inset:0;z-index:2;background:#fff;opacity:0;pointer-events:none;}
 
+/* perf profiler overlay (cfg.showFps) — its own element so it never collides with the status bar */
+#perfHud{position:fixed;top:calc(var(--sat) + 44px);left:8px;z-index:9;display:none;
+  background:rgba(0,0,0,.62);border:1px solid var(--bo);border-radius:9px;padding:7px 9px;
+  pointer-events:none;max-width:64vw;}
+#perfHud.on{display:block;}
+#perfHud .ph-stats{margin:0 0 6px;white-space:pre;letter-spacing:0;color:#8ff;
+  font:600 11px/1.5 ui-monospace,Menlo,Consolas,monospace;}
+#perfHud .ph-row{display:flex;gap:5px;flex-wrap:wrap;pointer-events:auto;}
+#perfHud .ph-btn{font:700 10px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--mu);
+  background:rgba(255,255,255,.06);border:1px solid var(--bo);border-radius:6px;padding:6px 7px;min-height:30px;}
+#perfHud .ph-btn:active{color:var(--c);border-color:rgba(0,245,212,.5);}
+
 /* hidden HUD (auto-hide / immersive) */
 #ui.hud-hidden .hud,#ui.hud-hidden .top{opacity:0;transform:translateY(0);transition:opacity .4s;pointer-events:none;}
 #ui.hud-hidden .hud{transform:translateY(20px);}
@@ -700,7 +712,8 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>Larger touch targets</label><div class="sw" id="swBig"></div></div>
       <div class="row"><label>Reduced motion / flash-safe</label><div class="sw" id="swReduce"></div></div>
       <div class="row"><label>Adaptive quality <span class="sub">(auto-scale glow to hold smooth FPS)</span></label><div class="sw" id="swAdaptiveQ"></div></div>
-      <div class="row"><label>Show FPS</label><div class="sw" id="swShowFps"></div></div>
+      <div class="row"><label>Full glow on mobile <span class="sub">(force the desktop bloom + cube refraction on a phone — richer look, lower FPS)</span></label><div class="sw" id="swFullGlow"></div></div>
+      <div class="row"><label>Show FPS + profiler <span class="sub">(per-section ms + tap A/B toggles overlay)</span></label><div class="sw" id="swShowFps"></div></div>
       <div class="row"><label>Language</label><select class="sel" id="setLang"><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option></select></div>
     </div>
 
@@ -759,10 +772,14 @@ const mainCtx = ctx;
 let W = 0, H = 0;
 
 function resize(){
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  const iw = window.innerWidth, ih = window.innerHeight;
+  // RES (1 by default) lets the LITE governor render to a smaller backing store and CSS-upscale.
+  // At RES===1 the backing store is innerWidth×innerHeight and no inline style is set → desktop byte-identical.
+  W = canvas.width  = Math.max(2, Math.round(iw * RES));
+  H = canvas.height = Math.max(2, Math.round(ih * RES));
+  if(RES !== 1){ canvas.style.width = iw + 'px'; canvas.style.height = ih + 'px'; }
+  else { canvas.style.width = ''; canvas.style.height = ''; }
 }
-resize();
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 
@@ -780,6 +797,12 @@ let simMode    = true;
 let manualBrightness = 0.85;
 let manualGlow = 1, manualThick = 1, manualDensity = 1, albumHue = 200;
 let _lastFrameT = 0, _fpsEMA = 0, qScale = 1, dQ = 1, fpsR = null;   // adaptive-quality FPS governor (qScale = glow, dQ = density)
+// ---- frame pacing: real wall-clock delta time (fixes the low-fps slow-motion) ----
+let _dt = 1/60, _dtf = 1;            // _dt = seconds since last frame; _dtf = _dt*60 (frame-equivalent factor for per-frame decays)
+const DT_CLAMP = 0.1;                // cap dt so a stall/tab-resume can't teleport the animation
+// ---- profiling instrument (all gated behind cfg.showFps → zero cost when off) ----
+const PERF = { spans:{}, maxdt:0, _ring:[] };
+function _pAdd(name, a){ const d = performance.now() - a; PERF.spans[name] = (PERF.spans[name]||0)*0.85 + d*0.15; }
 let manualSpeed      = 0.50;
 let manualIntensity  = 0.60;
 let manualHue        = 0;
@@ -818,7 +841,8 @@ const cfg = Object.assign({
   autoVJ:false, spinSpeed:25, playRate:100, lfo:false, adaptiveQ:true, showFps:false,
   // SOTA Wave 5 (free-canvas) — all default OFF
   duck:false, audioSym:false, beatSnap:false, kinetic:false, keyColor:false, hpss:false,
-  warpMesh:false, parallax:false, glitch:false, flow:false
+  warpMesh:false, parallax:false, glitch:false, flow:false,
+  fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
 if(cfg.bridgeUrl === 'http://localhost:8124') cfg.bridgeUrl = '';
@@ -830,6 +854,33 @@ const DEFAULT_BRIDGE = 'https://subsequently-determination-feels-album.trycloudf
 if(!/^(localhost$|127\.|0\.0\.0\.0$)/.test(location.hostname) && (!cfg.bridgeUrl || cfg.bridgeUrl === cfg._autoBridge)){
   cfg.bridgeUrl = DEFAULT_BRIDGE; cfg._autoBridge = DEFAULT_BRIDGE; saveCfg();
 }
+
+/* ===================== MOBILE PERFORMANCE PROFILE (LITE) =====================
+   Detected ONCE at boot, before the first render, so a phone starts cheap instead of discovering jank.
+   LITE flips the heavy render path (kills per-element shadowBlur, bypasses the cube-refraction composites,
+   caps symmetry/blend/post-FX, starts the governor low) and a single-pass bloom restores the neon look.
+   Desktop = LITE false ⇒ every value at its current default ⇒ byte-identical output.
+   Persisted under its OWN localStorage key so auto-detect can never clobber the user's saved cfg. */
+const _coarse      = matchMedia('(pointer:coarse)').matches && matchMedia('(hover:none)').matches;  // touch is the PRIMARY pointer (phones/tablets) — NOT a touch-laptop with a mouse
+const _smallScreen = matchMedia('(max-width:820px)').matches;
+const _iPadDesktop = navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;       // iPadOS reports a desktop (Mac) UA
+let   LITE   = (_coarse || _smallScreen || _iPadDesktop) && !cfg.fullGlow;
+let   GLOWK  = LITE ? 0 : 1;     // per-element shadowBlur multiplier (0 = killed on mobile; 1 = full desktop bloom)
+let   RES    = 1;                // dynamic backing-store scale (governor's lowest gear on LITE)
+let   _capFps = 0;              // 0 = uncapped; 30 = steady-30 terminal governor state on weak phones
+let   _bloomOn = LITE;           // single-pass mobile bloom (governor-droppable before RES)
+let   _abRefract = false;        // profiler A/B: force the cube-refraction path on even under LITE
+function recomputeLite(){        // re-run detection after the fullGlow toggle flips, live
+  LITE  = (_coarse || _smallScreen || _iPadDesktop) && !cfg.fullGlow;
+  GLOWK = LITE ? 0 : 1;
+  _bloomOn = LITE;
+  if(LITE){ if(qScale > 0.6) qScale = 0.6; if(dQ > 0.8) dQ = 0.8; }
+  else { RES = 1; _capFps = 0; }
+  resize();
+}
+if(LITE){ qScale = 0.6; dQ = 0.8; }   // governor starts at a cheap floor on a phone (no first-second jank window)
+try{ LS.set('perfProfile', { lite: LITE, res: RES, ts: Date.now() }); }catch(_){}
+resize();   // first sizing now that RES/LITE exist (the early resize() call was removed for this reason)
 
 const PALETTES = [
   { name:'Spectrum',     hues:null },
@@ -916,7 +967,7 @@ function hsl(h, a){ const hh = paletteHue(h) + _curHueBias; return 'hsla(' + (((
 function dot(x, y, r, h, a){
   ctx.fillStyle   = hsl(h, a);
   ctx.shadowColor = hsl(h, 1);
-  ctx.shadowBlur  = (10 + 12 * brightness) * manualGlow * qScale;
+  ctx.shadowBlur  = (10 + 12 * brightness) * manualGlow * qScale * GLOWK;   // GLOWK=0 on mobile → no per-element bloom (the single biggest fill-rate lever)
   ctx.beginPath(); ctx.arc(x, y, r * manualThick, 0, 6.2832); ctx.fill();
 }
 
@@ -924,7 +975,7 @@ function dot(x, y, r, h, a){
 function seg(x1, y1, x2, y2, h, a, w){
   ctx.strokeStyle = hsl(h, a);
   ctx.shadowColor = hsl(h, 0.9);
-  ctx.shadowBlur  = (7 + 7 * brightness) * manualGlow * qScale;
+  ctx.shadowBlur  = (7 + 7 * brightness) * manualGlow * qScale * GLOWK;     // GLOWK gates line bloom on mobile
   ctx.lineWidth   = w * manualThick;
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
 }
@@ -936,7 +987,7 @@ function upBeam(cx, top){
   grad.addColorStop(1, 'rgba(0,245,212,' + (0.9*brightness) + ')');
   ctx.strokeStyle = grad;
   ctx.lineWidth = (3 + audioBass*4) * pulse * manualThick;
-  ctx.shadowBlur = 24 * brightness * manualGlow * qScale;
+  ctx.shadowBlur = 24 * brightness * manualGlow * qScale * Math.max(GLOWK, 0.55);   // keep a softer glow on the signature up-beam even on mobile (only ~1-2 of these per frame → negligible)
   ctx.shadowColor = 'rgba(0,245,212,0.8)';
   ctx.beginPath(); ctx.moveTo(cx, H); ctx.lineTo(cx, top); ctx.stroke();
 }
@@ -944,7 +995,7 @@ function upBeam(cx, top){
 // glow-blur + thickness for the direct-draw patterns, so the per-pattern Glow / Thickness
 // sliders AND the adaptive-quality governor reach EVERY pattern — not just the ones built
 // on dot()/seg()/upBeam(). Both default to ×1, so output is unchanged at the slider defaults.
-function gb(x){ return x * manualGlow * qScale; }   // glow blur  (× user Glow × FPS governor)
+function gb(x){ return x * manualGlow * qScale * GLOWK; }   // glow blur  (× user Glow × FPS governor × mobile GLOWK) — feeds all 19 inline pattern shadowBlur sites
 function tw(x){ return x * manualThick; }            // line width (× user Thickness)
 
 /* ============================ draw functions ============================ */
@@ -1494,7 +1545,7 @@ function glProg(key, fragBody){
   return (_glProgs[key]={prog:p, uni:{}});
 }
 function glResize(){
-  const cap=1280, longest=Math.max(W,H), sc=Math.min(1, cap/longest) * (cfg.adaptiveQ ? Math.max(0.5,qScale) : 1);
+  const cap=LITE?900:1280, longest=Math.max(W,H), sc=Math.min(1, cap/longest) * (cfg.adaptiveQ ? Math.max(0.5,qScale) : 1);
   const w=Math.max(16,(W*sc)|0), h=Math.max(16,(H*sc)|0);
   if(w!==_glw||h!==_glh){ _glw=w; _glh=h; _glcv.width=w; _glcv.height=h; }
 }
@@ -2146,11 +2197,11 @@ function computeFeatures(){
   }
   _fluxEMA = _fluxEMA*0.92 + flux*0.08;                                // #3 adaptive onset
   if(flux > _fluxEMA*1.5 + 0.5 && (t-_lastOnsetT)>0.05){ onsetEnv=1; _lastOnsetT=t; }
-  onsetEnv *= 0.84;
+  onsetEnv *= Math.pow(0.84, _dtf);                                                    // dt-scaled so kick/snare flashes don't smear/linger at low fps
   const avg=(a,b)=>{ let s=0; for(let i=a;i<=b;i++) s+=fBands[i]; return s/(b-a+1); };
-  kickEnv  = Math.max(kickEnv*0.82,  _hit(avg(0,3), _kp,_ke));                          // #4
-  snareEnv = Math.max(snareEnv*0.80, _hit((avg(4,8)+avg(13,17))*0.5, _sp,_se));
-  hatEnv   = Math.max(hatEnv*0.74,   _hit(avg(19,23), _hp,_he));
+  kickEnv  = Math.max(kickEnv*Math.pow(0.82,_dtf),  _hit(avg(0,3), _kp,_ke));           // #4
+  snareEnv = Math.max(snareEnv*Math.pow(0.80,_dtf), _hit((avg(4,8)+avg(13,17))*0.5, _sp,_se));
+  hatEnv   = Math.max(hatEnv*Math.pow(0.74,_dtf),   _hit(avg(19,23), _hp,_he));
   centroid = cT>0 ? Math.max(0,Math.min(1, Math.log((cW/cT)/fLo)/lr)) : centroid*0.95;  // #6
   flatness = (aSum>0 && gN>0) ? Math.max(0,Math.min(1, Math.exp(gSum/gN)/(aSum/NBANDS))) : 0;
   let sq=0,nn=0; for(let i=0;i<waveData.length;i+=4){ const v=(waveData[i]-128)/128; sq+=v*v; nn++; } audioRMS = Math.sqrt(sq/nn);  // #40
@@ -2169,7 +2220,7 @@ const TLFO={ sin:0, cos:0, tri:0, half:0, quarter:0, twitch:0, beat:0, bar:0, bp
 function computeTempo(){
   const bpm=(currentBPM>40 && currentBPM<210)?currentBPM:(bpmEst>40&&bpmEst<210?bpmEst:124);   // detected/metadata BPM is steadier than the lite real-time estimate
   TLFO.bpm=bpm;
-  const inc=(bpm/60)*0.016;                                   // beats advanced this render frame
+  const inc=(bpm/60)*_dt;                                     // beats advanced this render frame (wall-clock dt → beat-sync stays real-time at any fps)
   _prevBeatPh=_beatPh; _beatPh=(_beatPh+inc)%1;
   if(bpmEst>40 && playing && audioReactive){ let e=beatPhase-_beatPh; if(e>0.5)e-=1; else if(e<-0.5)e+=1; _beatPh=((_beatPh+e*0.05)%1+1)%1; }  // PLL-lite pull toward the live clock
   _barPh=(_barPh+inc/4)%1;
@@ -2954,8 +3005,28 @@ const TRANS_DUR = 0.42;
 const _pyr = document.createElement('canvas'), _pyrc = _pyr.getContext('2d');
 // audio-warped feedback buffer (SOTA #5): snapshot of last frame, re-drawn zoomed/rotated by the music
 const _fb = document.createElement('canvas'), _fbc = _fb.getContext('2d');
+// mobile single-pass bloom buffer (1/4-res; bilinear downscale IS the blur)
+const _glow = document.createElement('canvas'), _glowc = _glow.getContext('2d');
+_glowc.imageSmoothingEnabled = true;
 function refract(){
   if(_off2.width !== W || _off2.height !== H){ _off2.width = W; _off2.height = H; }
+  if(LITE && !_abRefract){
+    // MOBILE composite: rebuild main fresh from the opaque _src (no accumulation) + ONE single-pass bloom.
+    // The bloom replaces the killed per-element shadowBlur. Derived from _src each frame, drawn onto a freshly
+    // overwritten main, so it cannot accumulate. 'screen' (not 'lighter') asymptotes → bright fills never blow to white.
+    mainCtx.globalCompositeOperation = 'source-over'; mainCtx.globalAlpha = 1;
+    mainCtx.drawImage(_src, 0, 0);                                       // sharp scene (opaque → fully overwrites main)
+    if(_bloomOn && GLOWK === 0){
+      const gw = Math.max(1, W>>2), gh = Math.max(1, H>>2);             // 1/4-res → free bilinear blur
+      if(_glow.width !== gw || _glow.height !== gh){ _glow.width = gw; _glow.height = gh; }
+      _glowc.imageSmoothingEnabled = true; _glowc.clearRect(0,0,gw,gh); _glowc.drawImage(_src, 0,0, gw,gh);
+      mainCtx.imageSmoothingEnabled = true;
+      mainCtx.globalCompositeOperation = 'screen'; mainCtx.globalAlpha = 0.85;   // soft additive halo, clamp-safe
+      mainCtx.drawImage(_glow, 0,0, W, H);
+      mainCtx.globalAlpha = 1; mainCtx.globalCompositeOperation = 'source-over';
+    }
+    return;
+  }
   mainCtx.globalCompositeOperation = 'source-over'; mainCtx.fillStyle = '#000'; mainCtx.fillRect(0, 0, W, H);
   const sh = 4 + audioBass * 16 + onsetEnv * 24 + stereoWidth * 12;                              // split widens with bass + chromatic POP on transients (#11/#29) + stereo width (#41)
   const chans = [['#ff0000', sh, 0], ['#00ff00', -sh*0.5, sh*0.87], ['#0000ff', -sh*0.5, -sh*0.87]];
@@ -2968,10 +3039,42 @@ function refract(){
   mainCtx.globalCompositeOperation = 'source-over';
 }
 
+/* ---- profiling overlay: per-section frame-time breakdown + tap A/B toggles (gated behind cfg.showFps) ---- */
+let _perfHud = null, _perfStats = null;
+function _ensurePerfHud(){
+  if(_perfHud) return;
+  _perfHud = document.createElement('div'); _perfHud.id = 'perfHud';
+  _perfStats = document.createElement('pre'); _perfStats.className = 'ph-stats';
+  const row = document.createElement('div'); row.className = 'ph-row';
+  const mk = (label, fn) => { const b = document.createElement('button'); b.className = 'ph-btn'; b.textContent = label; b.onclick = (e) => { e.stopPropagation(); fn(); }; row.appendChild(b); };
+  mk('GLOW',    () => { GLOWK = GLOWK ? 0 : 1; _bloomOn = (GLOWK === 0) && LITE; toast('GLOWK ' + GLOWK); });
+  mk('BLOOM',   () => { _bloomOn = !_bloomOn; toast('bloom ' + (_bloomOn ? 'on' : 'off')); });
+  mk('REFRACT', () => { _abRefract = !_abRefract; toast('A/B refract ' + (_abRefract ? 'on' : 'off')); });
+  mk('FULL',    () => { cfg.fullGlow = !cfg.fullGlow; saveCfg(); recomputeLite(); toast('fullGlow ' + (cfg.fullGlow ? 'on → desktop path' : 'off → lite')); });
+  _perfHud.appendChild(_perfStats); _perfHud.appendChild(row);
+  document.body.appendChild(_perfHud);
+}
+function renderPerfHud(){
+  _ensurePerfHud(); _perfHud.classList.add('on');
+  const s = PERF.spans, f = (x) => (x || 0).toFixed(1);
+  _perfStats.textContent =
+    Math.round(_fpsEMA || 0) + ' fps   max ' + Math.round(PERF.maxdt) + 'ms\n' +
+    (LITE ? 'LITE' : 'FULL') + '  glowk' + GLOWK + '  bloom' + (_bloomOn ? 1 : 0) + '  res' + RES.toFixed(2) + (_capFps ? '  cap' + _capFps : '') + '\n' +
+    'q' + qScale.toFixed(2) + '  d' + dQ.toFixed(2) + '\n' +
+    'pat ' + f(s.pattern) + '   ref ' + f(s.refract) + '\n' +
+    'trail ' + f(s.trail) + '   fx ' + f(s.postfx) + ' ms';
+}
+
 function loop(){
   try{
-  const useRefract = cfg.refract && laserOn;
+  { const _now = performance.now(); if(loop._last==null) loop._last=_now; _dt=(_now-loop._last)/1000; loop._last=_now; if(_dt>DT_CLAMP)_dt=DT_CLAMP; else if(_dt<0)_dt=0; _dtf=_dt*60;
+    if(cfg.showFps){ PERF._ring.push(_dt*1000); if(PERF._ring.length>60)PERF._ring.shift(); PERF.maxdt=Math.max.apply(null,PERF._ring); } }
+  if(_capFps===30){ loop._sk=!loop._sk; if(loop._sk) return; }   // steady-30 terminal state: render every other frame; t still accumulates in finally
+  // Render to the offscreen _src whenever we composite to main: always on LITE (mobile composite + bloom rebuild),
+  // and on desktop only when the cube refraction is on. refract() then branches: LITE→copy+bloom, else→3-pass split.
+  const useRefract = laserOn && (LITE || cfg.refract || _abRefract);
   if(useRefract && (_src.width !== W || _src.height !== H)){ _src.width = W; _src.height = H; }
+  let _ps = cfg.showFps ? performance.now() : 0;
   ctx = useRefract ? _srcc : mainCtx;          // pattern + trail render to the offscreen when refracting
 
   // pattern transition: snapshot the OUTGOING frame once, before the trail fades it
@@ -2985,8 +3088,9 @@ function loop(){
   // motion-blur trail / audio-warped feedback (source-over). With camera bg, draw the video then darken.
   ctx.globalCompositeOperation = 'source-over';
   const _react = playing && audioReactive;
-  if(cfg.feedback && laserOn && !(cfg.camera && camVideo && camVideo.readyState >= 2)){
+  if(cfg.feedback && !LITE && laserOn && !(cfg.camera && camVideo && camVideo.readyState >= 2)){
     // SOTA #5/#33: re-draw the persisted frame zoomed+rotated by the music → flowing MilkDrop feedback
+    // (HARD-GATED off on LITE: the feedback loop re-amplifies the additive bloom → progressive white-out)
     if(_fb.width !== W || _fb.height !== H){ _fb.width = W; _fb.height = H; }
     _fbc.globalCompositeOperation = 'source-over'; _fbc.clearRect(0, 0, W, H);
     try{ _fbc.drawImage(ctx.canvas, 0, 0); }catch(_){}                            // snapshot last frame
@@ -3004,6 +3108,7 @@ function loop(){
     const fade = ((cfg.trail || 30) / 100) * (1 - (_react ? Q.energy * 0.4 : 0));   // #8 reactive decay: longer trails when loud
     ctx.fillStyle = 'rgba(10,10,12,' + Math.max(0.04, fade) + ')'; ctx.fillRect(0, 0, W, H);
   }
+  if(cfg.showFps) _pAdd('trail', _ps);
 
   analyseAudio();
   computeFeatures();                 // SOTA Wave 1: 24-band spectrum + onsets + timbre + q-bus
@@ -3056,14 +3161,16 @@ function loop(){
 
   // SOTA #12: audio-driven symmetry — geometry gains mirror-arms on the drop (smoothed so arm-count ramps, not flickers)
   _symDrive = _symDrive*0.92 + (playing && audioReactive ? (audioBass*0.7 + Q.low*0.5 + audioLevel*0.3) : 0)*0.08;
-  let _symBonus = (cfg.audioSym && playing && audioReactive) ? Math.min(4, Math.floor(_symDrive*7)) : 0;
+  let _symBonus = (cfg.audioSym && !LITE && playing && audioReactive) ? Math.min(4, Math.floor(_symDrive*7)) : 0;
   if(cfg.adaptiveQ){ if(qScale<0.55) _symBonus = Math.min(_symBonus,1); else if(qScale<0.75) _symBonus = Math.min(_symBonus,2); }   // back off arms (×draw-cost) under load
   _symEff = Math.max(1, (cfg.symmetry|0) + _symBonus);
+  if(LITE) _symEff = Math.min(_symEff, 2);                    // mobile: cap kaleidoscopic re-draws (each ×N reruns the whole pattern)
 
-  beatEnv *= 0.9;
+  beatEnv *= Math.pow(0.9, _dtf);                             // dt-scaled beat-pulse decay
   pulse = 1 + beatEnv * 0.18 * intensity + (playing && audioReactive ? audioBass * 0.14 : 0);
   if(cfg.duck) pulse *= (0.85 + 0.15*_duck);                  // SOTA #25: gentle scale pump on the kick
 
+  if(cfg.showFps) _ps = performance.now();
   if(laserOn){
     // source-over + per-element shadowBlur gives a bright bloom without the
     // runaway white-out that additive ('lighter') blending accumulates.
@@ -3082,7 +3189,7 @@ function loop(){
     if(fn) drawOne(fn);
     if(cfg.feedback) ctx.globalAlpha = 1;
     // blend a 2nd pattern with its OWN palette + hue offset + color-mix composite (creates new colors)
-    if(cfg.blend && draws[cfg.blendMode] && (cfg.blendMode !== mode || cfg.blendPalette !== cfg.palette || cfg.blendHue)){
+    if(cfg.blend && !LITE && draws[cfg.blendMode] && (cfg.blendMode !== mode || cfg.blendPalette !== cfg.palette || cfg.blendHue)){
       ctx.save();
       ctx.globalAlpha = Math.max(0.05, Math.min(0.95, cfg.blendMix / 100));
       if(cfg.blendComp && cfg.blendComp !== 'source-over') ctx.globalCompositeOperation = cfg.blendComp;
@@ -3104,8 +3211,12 @@ function loop(){
     if(cfg.particles && PARTS.length) drawParticles();   // SOTA #15: onset spark layer
     ctx.shadowBlur = 0;
   }
+  if(cfg.showFps) _pAdd('pattern', _ps);
 
-  if(useRefract) refract();   // split the offscreen pattern through the dichroic cube onto main
+  // composite the offscreen scene onto main: desktop = dichroic cube split; mobile = fresh copy + single-pass bloom.
+  // (Both rebuild main from the opaque _src each frame, so the additive bloom can NEVER accumulate to white.)
+  if(useRefract){ if(cfg.showFps) _ps=performance.now(); refract(); if(cfg.showFps) _pAdd('refract', _ps); }
+  else if(cfg.showFps) PERF.spans.refract = (PERF.spans.refract||0)*0.85;
   ctx = mainCtx;              // restore main target
 
   // hologram pyramid: tile the rendered frame into 4 radial copies for an acrylic pyramid
@@ -3129,13 +3240,16 @@ function loop(){
 
   // SOTA #46/#55/#43 full-frame post-FX — each snapshots+recomposites the frame. Budget guard: under low
   // FPS (governor engaged) run only the FIRST active one so 3 stacked snapshots can't blow the phone budget.
-  if(laserOn){
+  // HARD-GATED off on LITE (each is a full-frame composite the phone can't afford).
+  if(laserOn && !LITE){
+    if(cfg.showFps) _ps = performance.now();
     const _lowF = cfg.adaptiveQ && _fpsEMA && _fpsEMA < 40; let _did = false;
     if(cfg.warpMesh){ drawWarpMesh(); _did = true; }
     if(cfg.parallax && !(_lowF && _did)){ dpEnsureTilt(); drawDepthPlates(); _did = true; }
     if(cfg.glitch && !(_lowF && _did)) drawScanGlitch();
+    if(cfg.filmgrain) drawPostFX();   // SOTA #49: vignette + film grain + halation
+    if(cfg.showFps) _pAdd('postfx', _ps);
   }
-  if(cfg.filmgrain && laserOn) drawPostFX();   // SOTA #49: vignette + film grain + halation
 
   // live level meter (composite loudness so the bar is lively)
   meterFill.style.width = Math.min(100, (playing ? (audioLevel*1.5 + audioBass*0.6) : 0) * 100) + '%';
@@ -3144,9 +3258,31 @@ function loop(){
   if(typeof updateSeek === 'function') updateSeek();
   if(cfg.autocycle && t - autocycleT > Math.max(5, (cfg.cycleMins || 1) * 60)){ autocycleT = t; requestMode(randomMode()); }
   { const now = performance.now(); if(_lastFrameT){ const dt = now - _lastFrameT; if(dt > 0) _fpsEMA = _fpsEMA ? _fpsEMA * 0.9 + (1000 / dt) * 0.1 : 1000 / dt; } _lastFrameT = now;
-    if(cfg.adaptiveQ){ if(_fpsEMA && _fpsEMA < 45){ if(qScale > 0.4) qScale = Math.max(0.4, qScale - 0.03); else if(dQ > 0.55) dQ = Math.max(0.55, dQ - 0.02); } else if(_fpsEMA > 56){ if(dQ < 1) dQ = Math.min(1, dQ + 0.01); else if(qScale < 1) qScale = Math.min(1, qScale + 0.01); } } else { qScale = 1; dQ = 1; }
+    if(cfg.adaptiveQ){
+      const lowT = 45, hiT = LITE ? 54 : 56;
+      if(_fpsEMA && _fpsEMA < lowT){
+        if(!LITE){ if(qScale > 0.4) qScale = Math.max(0.4, qScale - 0.03); else if(dQ > 0.55) dQ = Math.max(0.55, dQ - 0.02); }   // desktop: original behavior
+        else {   // LITE ladder: density → bloom → resolution → cap30 (coarse levers cooldown-gated to avoid resize flicker)
+          if(dQ > 0.5){ dQ = Math.max(0.5, dQ - 0.03); }
+          else if(loop._gov == null || t - loop._gov > 1.5){ loop._gov = t;
+            if(_bloomOn && _fpsEMA < 42){ _bloomOn = false; }
+            else if(RES > 0.6){ RES = Math.max(0.6, RES - 0.1); resize(); }
+            else if(_capFps !== 30){ _capFps = 30; }
+          }
+        }
+      } else if(_fpsEMA > hiT){
+        if(!LITE){ if(dQ < 1) dQ = Math.min(1, dQ + 0.01); else if(qScale < 1) qScale = Math.min(1, qScale + 0.01); }   // desktop: original behavior
+        else if(_fpsEMA > hiT + 4 && (loop._gov == null || t - loop._gov > 3)){ loop._gov = t;   // recover slowly; GLOWK is NEVER re-enabled on LITE
+          if(_capFps === 30){ _capFps = 0; }
+          else if(RES < 1){ RES = Math.min(1, RES + 0.1); resize(); }
+          else if(!_bloomOn){ _bloomOn = true; }
+          else if(dQ < 1){ dQ = Math.min(1, dQ + 0.05); }
+        }
+      }
+    } else { qScale = 1; dQ = 1; }
     const fr = fpsR || (fpsR = document.getElementById('fpsR') || false);
-    if(fr){ if(cfg.showFps){ fr.style.display = ''; fr.textContent = Math.round(_fpsEMA || 0) + ' fps' + (qScale < 0.99 ? ' q' + qScale.toFixed(2) : '') + (dQ < 0.99 ? ' d' + dQ.toFixed(2) : ''); } else if(fr.style.display !== 'none') fr.style.display = 'none'; } }
+    if(fr){ if(cfg.showFps){ fr.style.display = ''; fr.textContent = Math.round(_fpsEMA || 0) + ' fps'; } else if(fr.style.display !== 'none') fr.style.display = 'none'; }
+    if(cfg.showFps) renderPerfHud(); else if(_perfHud && _perfHud.classList.contains('on')) _perfHud.classList.remove('on'); }
   if(cfg.autoVJ && playing && audioReactive){ const e = audioLevel + audioBass; vjBase = vjBase * 0.985 + e * 0.015; if(e > vjBase * 1.7 + 0.15 && t - vjLast > 5){ vjLast = t; requestMode(randomMode()); } }
   if(cfg.autohide && !immersive && performance.now() - lastActivity > 4000) setHud(true);
 
@@ -3154,10 +3290,11 @@ function loop(){
     if(!loop._warned){ loop._warned = 1; try{ console.warn('[atlas] render recovered from error:', err); }catch(_){} }
     ctx = mainCtx;
   } finally {
-    t += 0.016;
+    t += _dt;                       // wall-clock advance (fixes low-fps slow-motion); _dt computed at loop top
     requestAnimationFrame(loop);
   }
 }
+document.addEventListener('visibilitychange', () => { if(!document.hidden){ loop._last = null; _lastFrameT = 0; } });   // resume contributes ~0 dt instead of a multi-second teleport
 requestAnimationFrame(loop);
 
 /* ============================ beat feedback ============================ */
@@ -3586,6 +3723,7 @@ bindSw('swAutohide', 'autohide', () => lastActivity = performance.now());
 bindSw('swBig', 'big', on => document.body.classList.toggle('big', on));
 bindSw('swReduce', 'reduce', on => document.body.classList.toggle('reduce', on));
 bindSw('swAdaptiveQ', 'adaptiveQ'); bindSw('swShowFps', 'showFps');
+bindSw('swFullGlow', 'fullGlow', () => recomputeLite());   // mobile escape hatch: re-detect LITE live when toggled
 $('setLang').onchange = () => { cfg.lang = $('setLang').value; saveCfg(); applyLang(); };
 $('setJamendo').value = cfg.jamendoKey || '';
 $('setJamendo').oninput = () => { cfg.jamendoKey = $('setJamendo').value.trim(); saveCfg(); if(enabledEngines) enabledEngines.add('jamendo'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
@@ -3733,7 +3871,7 @@ function applyCfgToUI(){
   document.body.classList.toggle('reduce', cfg.reduce);
   [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   if($('setLang')) $('setLang').value = cfg.lang;
   if($('setBlendMode')) $('setBlendMode').value = cfg.blendMode;
@@ -3794,7 +3932,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   let hadController = !!navigator.serviceWorker.controller;
