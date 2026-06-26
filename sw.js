@@ -1,5 +1,5 @@
 /* ATLAS Prism — cache-first service worker */
-const CACHE = 'atlas-prism-v45';
+const CACHE = 'atlas-prism-v46';
 /* v43 SEARCH GLITCH FIX: doSearch() rewritten — (1) a generation guard so a stale/superseded search can
    no longer wipe a good result list (this caused YouTube results to flash then vanish to "no matches");
    (2) PROGRESSIVE render — each engine's results appear as they arrive, Audius/Archive instantly while the

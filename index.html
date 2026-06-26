@@ -42,6 +42,10 @@ button,.pill{
 
 /* ---------- canvas ---------- */
 #viz{position:fixed;inset:0;z-index:0;display:block;}   /* fixed backdrop: stays put while the UI scrolls */
+/* no-PC YouTube player — full-viewport but BEHIND the opaque canvas (#viz paints over it). opacity keeps it
+   effectively invisible while still "rendered" so mobile browsers keep it playing (display:none would pause). */
+#ytembed{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.01;}
+#ytembed iframe{width:100%;height:100%;border:0;}
 
 /* ---------- overlay ---------- */
 #ui{
@@ -445,6 +449,7 @@ body.reduce .livedot{animation:none;}
 </head>
 <body>
 
+<div id="ytembed"></div>   <!-- no-PC YouTube IFrame player: behind the opaque canvas (NOT display:none, which would pause it on mobile) -->
 <canvas id="viz"></canvas>
 
 <div id="ui">
@@ -2486,6 +2491,7 @@ async function play(){
     else if(currentSrc === 'track'){ if(!trackBuffer){ openSearch(); return; } startTrackNode(trackPauseOffset); }
     else if(currentSrc === 'mic')   await startMic();
     else if(currentSrc === 'stream'){ if(!streamEl || !streamEl.src){ openSearch(); return; } const p = streamEl.play(); if(p && p.catch) p.catch(() => {}); }
+    else if(currentSrc === 'yt'){ if(_ytPlayer && _ytPlayer.playVideo){ _ytPlayer.playVideo(); enableMicReactivity(); } else { openSearch(); return; } }
     else { openSearch(); return; }   // failed/no source — pick a song, never silently play the demo
   }catch(err){
     npArtist.textContent = 'audio blocked: ' + (err && err.name || 'error');
@@ -2501,7 +2507,7 @@ function stop(){
   if(currentSrc === 'loading') currentSrc = 'none';   // a cancelled load must not leave play() stuck on 'loading'
   if(currentSrc === 'track' && trackNode && trackBuffer)   // remember position for resume
     trackPauseOffset = (actx.currentTime - trackStartedAt) % trackBuffer.duration;
-  stopDemo(); stopMic(); stopTrackNode(); stopStream();
+  stopDemo(); stopMic(); stopTrackNode(); stopStream(); stopYT();
   playing = false;
   audioLevel = audioBass = audioMid = audioTreble = 0;
   playBtn.textContent = '▶';
@@ -2836,6 +2842,7 @@ function renderLinks(term){
 let searchGen = 0;   // stale-search guard: only the LATEST search may touch the results DOM
 async function doSearch(term){
   if(!term) return;
+  if(/youtu\.?be/i.test(term)){ const _ytid = ytIdFrom(term); if(_ytid){ closeSearch(); searchInput.value = ''; playYouTubeEmbed(_ytid, 'YouTube', 'pasted link'); return; } }   // pasted YouTube link → no-PC embed playback (works with the computer OFF)
   term = parseQuery(term);                                    // accept pasted song links
   if(!enabledEngines) enabledEngines = new Set(ENGINES.map(e => e.id));
   const myGen = ++searchGen;
@@ -2983,6 +2990,74 @@ async function loadTrackObj(r){
 }
 // picking a search result plays it now and becomes the current queue context
 function selectResult(r){ queue = [r]; qIndex = 0; closeSearch(); loadTrackObj(r); }
+
+/* ============================================================================
+   NO-PC YOUTUBE — play any YouTube song on the phone with the computer OFF.
+   YouTube's own IFrame player handles playback (no extraction, no CORS, no bridge);
+   the mic taps the out-loud audio so the visuals still react (authentic for a
+   room light-show). Tradeoffs: ads on free YouTube; mic-reactivity needs audible
+   playback; iOS background/lock-screen playback is limited vs. the streamer.
+   ========================================================================== */
+let _ytPlayer = null, _ytApiP = null, ytVideoId = null, _ytDur = 0, _ytReadyVid = null;
+function ytIdFrom(s){
+  if(!s) return null; s = String(s).trim();
+  let m = s.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/|live\/)|youtu\.be\/)([\w-]{11})/i);
+  if(m) return m[1];
+  m = s.match(/[?&](?:v|id)=([\w-]{11})(?:[^\w-]|$)/);   // bare ?v= or the bridge's id= marker
+  if(m) return m[1];
+  if(/^[\w-]{11}$/.test(s)) return s;                    // a bare 11-char id
+  return null;
+}
+function loadYTApi(){
+  if(window.YT && window.YT.Player) return Promise.resolve();
+  if(_ytApiP) return _ytApiP;
+  _ytApiP = new Promise((res) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if(prev) try{ prev(); }catch(_){} res(); };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
+  });
+  return _ytApiP;
+}
+async function enableMicReactivity(){
+  if(typeof micSource !== 'undefined' && micSource) return;     // already tapping the mic
+  try{ await startMic(); }
+  catch(e){ toast('Allow mic access for reactive visuals (YouTube still plays)', 'err'); }
+}
+function stopYT(){ if(_ytPlayer){ try{ _ytPlayer.pauseVideo(); }catch(_){} } }
+async function playYouTubeEmbed(videoId, title, artist, art){
+  videoId = ytIdFrom(videoId) || videoId;
+  if(!videoId){ toast('Not a YouTube link / id', 'err'); return; }
+  stop();                                  // stop current audio + bump loadGen
+  const myGen = loadGen;
+  initAudio(); if(actx.state === 'suspended'){ try{ await actx.resume(); }catch(_){} }
+  if(myGen !== loadGen) return;
+  currentSrc = 'yt'; ytVideoId = videoId; _ytDur = 0;
+  npTitle.textContent  = title || 'YouTube';
+  npArtist.textContent = (artist || 'YouTube') + ' · ▶ no-PC embed · 🎤 reacts to room audio';
+  sbBpm.textContent = '▶'; playBtn.textContent = '⏳'; playBtn.classList.add('playing');
+  await loadYTApi();
+  if(myGen !== loadGen) return;
+  const onState = (e) => {
+    const Y = window.YT.PlayerState;
+    if(e.data === Y.PLAYING){
+      playing = true; playBtn.textContent = '⏸'; playBtn.classList.add('playing');
+      try{ _ytDur = _ytPlayer.getDuration(); }catch(_){}
+      try{ const vd = _ytPlayer.getVideoData(); if(vd && vd.title){ npTitle.textContent = vd.title; updateMediaSession(vd.title, vd.author||'YouTube', art); } }catch(_){}
+      enableMicReactivity();
+    } else if(e.data === Y.PAUSED){ playing = false; playBtn.textContent = '▶'; playBtn.classList.remove('playing'); }
+    else if(e.data === Y.ENDED){ if(repeat === 'one'){ try{ _ytPlayer.seekTo(0); _ytPlayer.playVideo(); }catch(_){} } else if(queue.length > 1) nextTrack(); else { playing = false; playBtn.textContent = '▶'; playBtn.classList.remove('playing'); } }
+  };
+  if(_ytPlayer && _ytPlayer.loadVideoById){ _ytReadyVid = videoId; _ytPlayer.loadVideoById(videoId); }
+  else {
+    _ytPlayer = new YT.Player('ytembed', {
+      width:'100%', height:'100%', videoId,
+      playerVars:{ playsinline:1, controls:0, rel:0, modestbranding:1, fs:0, iv_load_policy:3, disablekb:1 },
+      events:{ onReady:() => { try{ _ytPlayer.playVideo(); }catch(_){} }, onStateChange:onState,
+               onError:() => { toast('YouTube blocked this video (try another / Find-on link)', 'err'); } }
+    });
+  }
+  updateMediaSession(title || 'YouTube', artist || '', art);
+}
 
 document.querySelectorAll('.sp-chip[data-src]').forEach(b => {
   b.addEventListener('click', () => { closeSearch(); setSource(b.dataset.src); });
@@ -3617,7 +3692,7 @@ let seeking = false, seekFrac = 0, _seekHoldUntil = 0;
 function fmt(s){ s = Math.max(0, Math.floor(s || 0)); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); }
 function seekFracFromEvent(e){ const rect = $('seek').getBoundingClientRect(); const x = (e.clientX != null ? e.clientX : 0) - rect.left; return Math.max(0, Math.min(1, x / rect.width)); }
 function paintSeek(frac){
-  const dur = (currentSrc === 'stream' && streamEl && streamEl.duration) ? streamEl.duration : (currentSrc === 'track' && trackBuffer) ? trackBuffer.duration : 0;
+  const dur = (currentSrc === 'stream' && streamEl && streamEl.duration) ? streamEl.duration : (currentSrc === 'track' && trackBuffer) ? trackBuffer.duration : (currentSrc === 'yt') ? _ytDur : 0;
   const pct = Math.max(0, Math.min(100, frac * 100));
   $('seekFill').style.width = pct + '%'; $('seekKnob').style.left = pct + '%';
   $('tCur').textContent = fmt(frac * dur); $('tDur').textContent = fmt(dur);
@@ -3630,12 +3705,12 @@ function updateSeek(){
     if((++_msPosN % 20 === 0) && 'mediaSession' in navigator && navigator.mediaSession.setPositionState){ try{ navigator.mediaSession.setPositionState({ duration: dur, position: streamEl.currentTime, playbackRate: streamEl.playbackRate || 1 }); }catch(_){} }
   } else if(currentSrc === 'track' && trackBuffer && actx){ const dur = trackBuffer.duration; frac = ((actx.currentTime - trackStartedAt) % dur) / dur;
     if((++_msPosN % 20 === 0) && 'mediaSession' in navigator && navigator.mediaSession.setPositionState){ try{ navigator.mediaSession.setPositionState({ duration: dur, position: frac * dur, playbackRate: 1 }); }catch(_){} }
-  }
+  } else if(currentSrc === 'yt' && _ytPlayer && _ytPlayer.getDuration){ const dur = _ytPlayer.getDuration() || _ytDur; if(dur) _ytDur = dur; frac = dur ? ((_ytPlayer.getCurrentTime() || 0) / dur) : 0; }
   paintSeek(frac);
 }
 const seekEl = $('seek');
 seekEl.addEventListener('pointerdown', e => {
-  if(!((currentSrc === 'track' && trackBuffer) || (currentSrc === 'stream' && streamEl && streamEl.duration))) return;
+  if(!((currentSrc === 'track' && trackBuffer) || (currentSrc === 'stream' && streamEl && streamEl.duration) || (currentSrc === 'yt' && _ytDur))) return;
   seeking = true; seekFrac = seekFracFromEvent(e); paintSeek(seekFrac);
   try{ seekEl.setPointerCapture(e.pointerId); }catch(_){}
 });
@@ -3646,6 +3721,7 @@ function commitSeek(e){
   _seekHoldUntil = performance.now() + 350;                       // hold the knob here briefly so updateSeek() doesn't snap it back before currentTime catches up
   if(currentSrc === 'stream' && streamEl && streamEl.duration){ try{ streamEl.currentTime = seekFrac * streamEl.duration; }catch(_){} }   // native seek (instant)
   else if(currentSrc === 'track' && trackBuffer) startTrackNode(seekFrac * trackBuffer.duration);   // decoded buffer: restart the node at the dragged spot
+  else if(currentSrc === 'yt' && _ytPlayer){ try{ _ytPlayer.seekTo(seekFrac * (_ytDur || _ytPlayer.getDuration() || 0), true); }catch(_){} }   // YouTube embed seek
   haptic();
 }
 seekEl.addEventListener('pointerup', commitSeek);
@@ -3655,7 +3731,7 @@ seekEl.addEventListener('lostpointercapture', () => { seeking = false; });   // 
 /* ---- settings: switches, ranges, palette ---- */
 function bindSw(id, key, after){ const el = $(id); el.onclick = () => { cfg[key] = !cfg[key]; el.classList.toggle('on', cfg[key]); saveCfg(); haptic(); if(after) after(cfg[key]); }; }
 function bindRange(id, key, after){ const el = $(id); el.oninput = () => { cfg[key] = +el.value; setRangeFill(el); saveCfg(); if(after) after(cfg[key]); }; }
-bindRange('setVol', 'volume', v => { if(actx && masterGain) masterGain.gain.value = v / 100; });
+bindRange('setVol', 'volume', v => { if(actx && masterGain) masterGain.gain.value = v / 100; if(_ytPlayer && _ytPlayer.setVolume){ try{ _ytPlayer.setVolume(v); }catch(_){} } });
 bindRange('setPlayRate', 'playRate', v => { if(trackNode){ try{ trackNode.playbackRate.value = v / 100; }catch(_){} } if(streamEl){ try{ streamEl.playbackRate = v / 100; }catch(_){} } });
 bindRange('setBass', 'bassGain'); bindRange('setMid', 'midGain'); bindRange('setTreble', 'trebleGain');
 bindRange('setBeat', 'beatThresh'); bindRange('setSym', 'symmetry');
@@ -3938,7 +4014,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   let hadController = !!navigator.serviceWorker.controller;
