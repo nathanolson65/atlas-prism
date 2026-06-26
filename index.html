@@ -50,7 +50,7 @@ button,.pill{
   pointer-events:none;
 }
 #ui>*{pointer-events:none;}
-#ui button,#ui .pill,#ui input,#ui .pills{pointer-events:auto;}
+#ui button,#ui .pill,#ui input,#ui .pills,#ui .seek{pointer-events:auto;}   /* .seek is a div → must be re-enabled or it can't receive pointer events (was the "seek not draggable" bug) */
 
 /* ---------- top section ---------- */
 .top{
@@ -3613,7 +3613,7 @@ $('plPlayAll').addEventListener('click', () => { if(!playlist.length){ toast('Pl
 $('plClear').addEventListener('click', () => { playlist = []; LS.set('playlist', playlist); renderPlaylists(); toast('Playlist cleared'); });
 
 /* ---- seek (draggable scrubber + time, like a player but in ATLAS styling) ---- */
-let seeking = false, seekFrac = 0;
+let seeking = false, seekFrac = 0, _seekHoldUntil = 0;
 function fmt(s){ s = Math.max(0, Math.floor(s || 0)); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); }
 function seekFracFromEvent(e){ const rect = $('seek').getBoundingClientRect(); const x = (e.clientX != null ? e.clientX : 0) - rect.left; return Math.max(0, Math.min(1, x / rect.width)); }
 function paintSeek(frac){
@@ -3624,6 +3624,7 @@ function paintSeek(frac){
 }
 function updateSeek(){
   if(seeking) return;                       // user is dragging — don't fight them
+  if(performance.now() < _seekHoldUntil){ paintSeek(seekFrac); return; }   // brief post-commit hold so the knob doesn't snap back before currentTime catches up
   let frac = 0;
   if(currentSrc === 'stream' && streamEl && streamEl.duration){ const dur = streamEl.duration; frac = streamEl.currentTime / dur;
     if((++_msPosN % 20 === 0) && 'mediaSession' in navigator && navigator.mediaSession.setPositionState){ try{ navigator.mediaSession.setPositionState({ duration: dur, position: streamEl.currentTime, playbackRate: streamEl.playbackRate || 1 }); }catch(_){} }
@@ -3639,12 +3640,17 @@ seekEl.addEventListener('pointerdown', e => {
   try{ seekEl.setPointerCapture(e.pointerId); }catch(_){}
 });
 seekEl.addEventListener('pointermove', e => { if(!seeking) return; seekFrac = seekFracFromEvent(e); paintSeek(seekFrac); });
-seekEl.addEventListener('pointerup', e => {
+function commitSeek(e){
   if(!seeking) return; seeking = false;
-  if(currentSrc === 'stream' && streamEl && streamEl.duration){ streamEl.currentTime = seekFrac * streamEl.duration; }   // native seek (instant)
-  else if(currentSrc === 'track' && trackBuffer) startTrackNode(seekFrac * trackBuffer.duration);   // jump to the dragged spot
-});
+  seekFrac = seekFracFromEvent(e); paintSeek(seekFrac);          // commit at the ACTUAL release point (robust to a fast flick where the last move lagged)
+  _seekHoldUntil = performance.now() + 350;                       // hold the knob here briefly so updateSeek() doesn't snap it back before currentTime catches up
+  if(currentSrc === 'stream' && streamEl && streamEl.duration){ try{ streamEl.currentTime = seekFrac * streamEl.duration; }catch(_){} }   // native seek (instant)
+  else if(currentSrc === 'track' && trackBuffer) startTrackNode(seekFrac * trackBuffer.duration);   // decoded buffer: restart the node at the dragged spot
+  haptic();
+}
+seekEl.addEventListener('pointerup', commitSeek);
 seekEl.addEventListener('pointercancel', () => { seeking = false; });
+seekEl.addEventListener('lostpointercapture', () => { seeking = false; });   // safety: never get stuck in a seeking state
 
 /* ---- settings: switches, ranges, palette ---- */
 function bindSw(id, key, after){ const el = $(id); el.onclick = () => { cfg[key] = !cfg[key]; el.classList.toggle('on', cfg[key]); saveCfg(); haptic(); if(after) after(cfg[key]); }; }
@@ -3932,7 +3938,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   let hadController = !!navigator.serviceWorker.controller;
