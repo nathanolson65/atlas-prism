@@ -1,5 +1,9 @@
 /* ATLAS Prism — cache-first service worker */
-const CACHE = 'atlas-prism-v46';
+const CACHE = 'atlas-prism-v47';
+/* v47 RELIABLE UPDATES: install fetches assets with cache:'reload' (never caches an HTTP-stale index.html);
+   the page registers with updateViaCache:'none', calls reg.update() on focus, and auto-reloads on
+   controllerchange; plus a Settings "🔄 Force update now" button (unregister SW + clear caches + reload) as the
+   guaranteed manual escape for a stuck installed PWA. Also: no-PC YouTube (v46) + seek fix (v45) + LITE FPS (v44). */
 /* v43 SEARCH GLITCH FIX: doSearch() rewritten — (1) a generation guard so a stale/superseded search can
    no longer wipe a good result list (this caused YouTube results to flash then vanish to "no matches");
    (2) PROGRESSIVE render — each engine's results appear as they arrive, Audius/Archive instantly while the
@@ -104,7 +108,8 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
+    // cache:'reload' bypasses the HTTP cache so the new SW always stores the FRESHEST files (not a stale index.html)
+    caches.open(CACHE).then((cache) => Promise.all(ASSETS.map((u) => cache.add(new Request(u, { cache: 'reload' })))))
   );
   self.skipWaiting();
 });

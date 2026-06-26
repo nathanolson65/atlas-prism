@@ -710,6 +710,12 @@ body.reduce .livedot{animation:none;}
       <div class="btnrow"><button class="pbtn" id="pipBtn">📺 Pop-out (Picture-in-Picture)</button></div>
     </div>
 
+    <div class="grp"><h3>App updates</h3>
+      <div class="row"><label>Force update <span class="sub">(clear the cache + reload the very latest version from the web)</span></label></div>
+      <div class="btnrow"><button class="pbtn" id="forceUpdateBtn" style="width:100%;font-size:14px;min-height:48px">🔄 Force update now</button></div>
+      <div class="row"><label class="sub" id="updStatus">Tap if the app looks out of date. It re-downloads everything fresh.</label></div>
+    </div>
+
     <div class="grp"><h3>Device & accessibility</h3>
       <div class="row"><label>Haptic feedback</label><div class="sw" id="swHaptic"></div></div>
       <div class="row"><label>Keep screen awake</label><div class="sw" id="swWake"></div></div>
@@ -4014,20 +4020,30 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
+let _swReg = null;
 if('serviceWorker' in navigator){
-  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
-  let hadController = !!navigator.serviceWorker.controller;
+  // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => { _swReg = reg; try{ reg.update(); }catch(_){} }).catch(() => {});
+  });
+  // proactively check for a new version whenever the app regains focus (reopened / tab foregrounded)
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && _swReg){ try{ _swReg.update(); }catch(_){} } });
+  let _reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if(hadController){                                       // an UPDATE activated (not first install) — offer a refresh
-      const box = document.getElementById('toasts');
-      if(box){ const el = document.createElement('div'); el.className = 'toast ok'; el.style.cursor = 'pointer';
-        el.textContent = '🔄 New version ready — tap to refresh'; el.onclick = () => location.reload();
-        box.appendChild(el); requestAnimationFrame(() => el.classList.add('show')); }
-    }
-    hadController = true;
+    if(_reloaded) return; _reloaded = true; location.reload();   // a new SW took over → auto-reload to the fresh app (no tap needed)
   });
 }
+// Force-update button: the reliable manual nuke for a stuck installed PWA — unregister every SW, delete every
+// cache, then hard-reload so EVERYTHING is re-fetched from the web. (Does NOT touch your saved settings.)
+async function forceUpdate(){
+  const st = document.getElementById('updStatus'); if(st) st.textContent = 'Updating… clearing cache + re-downloading';
+  toast('🔄 Updating — re-downloading the latest…', 'ok');
+  try{ if('serviceWorker' in navigator){ const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); } }catch(_){}
+  try{ if(window.caches){ const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } }catch(_){}
+  setTimeout(() => { try{ location.reload(true); }catch(_){ location.reload(); } }, 500);
+}
+try{ const _fb = document.getElementById('forceUpdateBtn'); if(_fb) _fb.onclick = forceUpdate; }catch(_){}
 try{ const _sp = document.querySelector('#settingsPanel .panel-body'); if(_sp){ const _v = document.createElement('div'); _v.className = 'row'; _v.innerHTML = '<label>Version</label><span class="sub">ATLAS Prism ' + APP_VERSION + '</span>'; _sp.appendChild(_v); } }catch(_){}
 </script>
 </body>
