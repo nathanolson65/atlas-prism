@@ -700,6 +700,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>Scanline glitch <span class="sub">(waveform tears the frame + slit-scan smear on hits)</span></label><div class="sw" id="swGlitch"></div></div>
       <div class="row"><label>Optical-flow sparks <span class="sub">(particles stream along the actual on-screen motion)</span></label><div class="sw" id="swFlow"></div></div>
       <div class="row"><label>✴ GENESIS field <span class="sub">(the song rendered AS a seeded neural-field equation — crisp iso-contour sacred geometry, generative)</span></label><div class="sw" id="swGenesis"></div></div>
+      <div class="row"><label>◎ Cymatic field <span class="sub">(GENESIS sub-mode: the song as a real Bessel eigenmode standing-wave — nodal-line cymatic sacred geometry)</span></label><div class="sw" id="swCymatic"></div></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -857,6 +858,7 @@ const cfg = Object.assign({
   duck:false, audioSym:false, beatSnap:false, kinetic:false, keyColor:false, hpss:false,
   warpMesh:false, parallax:false, glitch:false, flow:false,
   genesis:false,   // GENESIS toggle: swaps INTO the song-as-equation neural-field mode; restores prev mode when off
+  genMode:'cppn',  // GENESIS sub-mode: 'cppn' (neural-field, original) | 'cymatic' (Bessel eigenmode standing-wave)
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
@@ -1806,6 +1808,7 @@ function genSongTime(tt){
   return tt;
 }
 function drawGLGenesis(tt){
+  if(cfg.genMode === 'cymatic') return drawGLCymatic(tt);
   if(!glInit()){ glNotice('GENESIS needs WebGL2 — try another pattern'); return; }
   const seed = _genCurrentSeed();
   if(seed !== _genWeightSeed) genSnapLatent();
@@ -1832,6 +1835,237 @@ function drawGLGenesis(tt){
     g.uniform1f(glU(P,'uHue'),  ((hueDeg%360)+360)%360);
     g.uniform1f(glU(P,'uSat'),  Math.max(45, 100 - flat*55));
     g.uniform1f(glU(P,'uLight'),Math.max(30, Math.min(70, 36 + bright*26 + energy*8)));
+  });
+}
+
+/* ======================================================================
+   GENESIS sub-mode: CYMATIC EIGENMODE FIELD (Bessel modes of a circular
+   membrane). F = Sum a_k*J_{n_k}(z*r)*cos(n*theta+phi). Crisp nodal lines on black.
+   DETERMINISTIC. Isolated: separate program key 'cymatic'; reuses mode
+   'genesis' so it inherits glResize's 540 LITE cap + adaptiveQ + self-fold. */
+const FRAG_CYMATIC = `
+#define NMODES 16
+#define LUTW   1024.0
+#define NORD   6.0
+#define XMAX   13.0
+
+uniform highp sampler2D uBessel;
+uniform float uCoef[NMODES];
+uniform float uScale;
+uniform float uTemp;
+uniform float uSym;
+uniform float uNModes;
+
+const float Zk[NMODES] = float[NMODES](
+  2.4048, 3.8317, 5.1356, 5.5201, 6.3802, 7.0156, 7.5883, 8.4172,
+  8.6537, 8.7715, 9.7610, 10.1735, 11.0647, 11.6198, 11.7915, 12.3386);
+const float Nk[NMODES] = float[NMODES](
+  0.0, 1.0, 2.0, 0.0, 3.0, 1.0, 4.0, 2.0,
+  0.0, 5.0, 3.0, 1.0, 4.0, 2.0, 0.0, 5.0);
+const float Pk[NMODES] = float[NMODES](
+  0.0, 1.5707963, 3.1415927, 0.0, 4.7123890, 1.5707963, 0.0, 3.1415927,
+  0.0, 1.5707963, 4.7123890, 1.5707963, 0.0, 3.1415927, 0.0, 1.5707963);
+
+vec2 kfold(vec2 q, float n){
+  if(n < 1.5) return q;
+  float a = atan(q.y, q.x), rr = length(q);
+  float seg = 6.28318530718 / n;
+  a = mod(a, seg);
+  a = abs(a - 0.5*seg);
+  return vec2(cos(a), sin(a)) * rr;
+}
+
+float Jlut(float n, float x){
+  x = abs(x);
+  if(x > XMAX) return 0.0;
+  float fx = clamp(x / XMAX, 0.0, 1.0) * (LUTW - 1.0);
+  float i0 = floor(fx);
+  float i1 = min(i0 + 1.0, LUTW - 1.0);
+  float fr = fx - i0;
+  int row = int(n + 0.5);
+  float a = texelFetch(uBessel, ivec2(int(i0), row), 0).r;
+  float b = texelFetch(uBessel, ivec2(int(i1), row), 0).r;
+  return mix(a, b, fr);
+}
+
+void main(){
+  vec2 uvr = (gl_FragCoord.xy * 2.0 - iResolution) / min(iResolution.x, iResolution.y);
+  vec2 p   = kfold(uvr * (uScale / 2.2), uSym);
+  float r   = length(p);
+  float ang = (r < 1e-6) ? 0.0 : atan(p.y, p.x);
+
+  float F   = 0.0;
+  float amp = 0.0;
+  int   N   = int(uNModes + 0.5);
+  for(int k=0; k<NMODES; k++){
+    if(k >= N) break;
+    float a_k = uCoef[k];
+    if(a_k <= 0.0005) continue;
+    float jr = Jlut(Nk[k], Zk[k] * r);
+    F   += a_k * jr * cos(Nk[k] * ang + Pk[k]);
+    amp += a_k;
+  }
+
+  float aw   = clamp(fwidth(F), 1e-3, 0.25) + 1e-4;
+  float dist = abs(F) / aw;
+  float wcore = mix(2.2, 0.85, clamp(uTemp,0.0,1.0));
+  float line  = 1.0 - smoothstep(0.0, wcore, dist);
+  float glow  = (1.0 - smoothstep(0.0, 7.0, dist)) * 0.22;
+  float ink   = max(line, glow);
+
+  float halfc = 1.0 - smoothstep(0.0, wcore*1.1, abs(abs(F) - 0.5) / aw);
+  ink = max(ink, halfc * (amp < 0.9 ? 0.30 : 0.0));
+
+  float guide = 0.0;
+  for(int g=1; g<5; g++){
+    float rad = 0.18 + float(g)*0.16;
+    guide = max(guide, 1.0 - smoothstep(0.0, wcore*1.3, abs(r - rad) / (fwidth(r) + 1e-4)));
+  }
+  ink = max(ink, guide * 0.42);
+
+  float discR = length(uvr * (uScale/2.2));
+  float disc  = 1.0 - smoothstep(0.82, 0.97, discR);   // tighter -> clean medallion + black negative space
+  ink *= disc;
+
+  float hueArg = r*0.08 + (F*0.5+0.5)*0.04 - iTime*0.008;
+  vec3 col = pal(hueArg) * ink;
+  col = floor(col*5.0 + 0.5) / 5.0;
+  col += pal(hueArg + 0.5) * pow(line, 3.0) * 0.40;
+  col = col / (col + 0.85);
+  col = clamp(col, 0.0, 1.0);
+  fragColor = vec4(col, 1.0);
+}`;
+
+const CYM_NMODES = 16;
+const CYM_LUTW   = 1024;     // J-LUT x-samples over [0, CYM_XMAX]
+const CYM_XMAX   = 13.0;     // covers max z*r (z_max 12.34, r<=1 inside disc mask)
+const CYM_NORD   = 6;        // Bessel orders n = 0..5
+const CYM_MODES = [
+  [0,1,2.4048],[1,1,3.8317],[2,1,5.1356],[0,2,5.5201],
+  [3,1,6.3802],[1,2,7.0156],[4,1,7.5883],[2,2,8.4172],
+  [0,3,8.6537],[5,1,8.7715],[3,2,9.7610],[1,3,10.1735],
+  [4,2,11.0647],[2,3,11.6198],[0,4,11.7915],[5,2,12.3386]
+];
+const CYM_AFLOOR = 0.08;     // amplitude noise floor (below = contributes nothing)
+const CYM_KDRAW  = 4;        // at most ~4 modes shine at once (anti-mush)
+
+// J_n(x) for n=0..5, x in [0,13] via ascending power series (stable, no factorial overflow).
+function besselJ(n, x){
+  const hx = x*0.5, hx2 = hx*hx;
+  let t = 1.0;
+  for(let i=1;i<=n;i++) t *= hx / i;      // t_0 = (x/2)^n / n!
+  let s = t, i = 0;
+  while(i < 60){
+    t *= -hx2 / ((i+1)*(i+1+n));
+    s += t; i++;
+    if(Math.abs(t) < 1e-12 * (1 + Math.abs(s))) break;
+  }
+  return s;
+}
+
+let _cymLUT = null, _cymLUTtex = null;
+function buildBesselLUT(){
+  if(_cymLUT) return _cymLUT;
+  const buf = new Float32Array(CYM_LUTW * CYM_NORD);   // row-major: [n*LUTW + xi]
+  for(let n=0;n<CYM_NORD;n++){
+    for(let xi=0;xi<CYM_LUTW;xi++){
+      const x = (xi/(CYM_LUTW-1)) * CYM_XMAX;
+      buf[n*CYM_LUTW + xi] = besselJ(n, x);
+    }
+  }
+  _cymLUT = buf; return buf;
+}
+function _cymEnsureLUT(){      // create + upload R32F texture ONCE (LUT never changes)
+  if(_cymLUTtex) return _cymLUTtex;
+  buildBesselLUT();
+  const g = GL;
+  _cymLUTtex = g.createTexture(); g.bindTexture(g.TEXTURE_2D, _cymLUTtex);
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.NEAREST);   // NEAREST (R32F+LINEAR is a mobile black-frame trap)
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST);   // shader does its own 2-tap lerp via texelFetch
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+  // sized internal format g.R32F is mandatory (unsized g.RED here fails on mobile)
+  g.texImage2D(g.TEXTURE_2D, 0, g.R32F, CYM_LUTW, CYM_NORD, 0, g.RED, g.FLOAT, _cymLUT);
+  return _cymLUTtex;
+}
+
+// per-mode amplitudes a_k(t): top-K gated, normalized, EMA-smoothed (frame-rate-indep via _dtf), snap on _genSnap.
+const _cymRaw  = new Float32Array(CYM_NMODES);   // this-frame target
+const _cymCoef = new Float32Array(CYM_NMODES);   // smoothed -> uploaded
+let _cymSeed = null;                             // dedicated seed (do NOT reuse _genWeightSeed)
+let _cymLastSongT = 0;
+function buildCymCoef(){
+  const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
+  const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
+  // 1) map 24 bands -> 16 modes (contiguous slice per mode), gentle high-mode rolloff, gate by floor.
+  for(let k=0;k<CYM_NMODES;k++){
+    const b0 = Math.floor(k * NB / CYM_NMODES);
+    const b1 = Math.max(b0+1, Math.floor((k+1) * NB / CYM_NMODES));
+    let sum=0, cnt=0;
+    for(let b=b0;b<b1 && b<NB;b++){ sum += (fBands[b]||0); cnt++; }
+    let v = cnt ? sum/cnt : 0;
+    v = Math.tanh(v * 1.6) * (1.0 - k*0.022);     // compress + low-mode dominance (clean geometry)
+    if(liteLoad) v *= (1.0 - k*0.04);             // LITE under load: bias toward low (n,m) — the filigree aliases worst
+    _cymRaw[k] = v < CYM_AFLOOR ? 0 : v;
+  }
+  // 1b) resting fundamental: mode (0,1) never fully dies -> calm breathing medallion in silence (deterministic).
+  const songT = (typeof _cymLastSongT==='number') ? _cymLastSongT : 0;
+  _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + 0.04*Math.sin(songT*0.25));
+  // 2) keep only the top-K largest (energy>0.7 allows one extra), zero the rest.
+  let kDraw = CYM_KDRAW;
+  if(typeof LITE!=='undefined' && LITE) kDraw = liteLoad ? 2 : 3;   // LITE caps K at 3, drops to 2 under load
+  const en = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0;
+  if(en > 0.7) kDraw += 1;
+  const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);
+  for(let r=kDraw;r<CYM_NMODES;r++) _cymRaw[idx[r]] = 0;
+  // 3) soft-normalize kept set so total contour density is loudness-stable (~1.2 sum).
+  let tot=0; for(let k=0;k<CYM_NMODES;k++) tot += _cymRaw[k];
+  if(tot > 1e-4){ const sc = 1.2/tot; for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
+  // 4) EMA smoothing — snap ONCE on seek/restart/seed-change then smooth; _dtf -> frame-rate independent.
+  if(_genSnap){
+    for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] = _cymRaw[k];
+    _genSnap = false;                              // consume the flag (mirrors buildLatent; restores EMA)
+  } else {
+    const dt = (typeof _dtf==='number' && _dtf>0) ? _dtf : 1;
+    const a = 1 - Math.pow(0.86, dt);
+    for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] += (_cymRaw[k]-_cymCoef[k]) * a;
+  }
+  return _cymCoef;
+}
+
+function drawGLCymatic(tt){
+  if(!glInit()){ glNotice('CYMATIC needs WebGL2 — try another pattern'); return; }
+  const seed = _genCurrentSeed();
+  if(seed !== _cymSeed){ _cymSeed = seed; _genSnap = true; }   // snap ONCE on real seed change
+  _cymEnsureLUT();
+  const songT = genSongTime(tt);                     // DETERMINISTIC song time (seek-snapped)
+  _cymLastSongT = songT;
+  const coef = buildCymCoef();                       // consumes _genSnap exactly once
+  let sym = Math.max(1, Math.min(8, (cfg.symmetry|0) || 1));
+  if(LITE) sym = Math.min(6, sym);
+  // mode-count lever: LITE renders fewer modes; drops further when the LITE governor lowers dQ.
+  let nModes = CYM_NMODES;
+  if(LITE) nModes = (typeof dQ==='number' && dQ < 0.7) ? 8 : 10;   // phone baseline 10, 8 under load
+  const scale = 2.2;
+  const temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
+  glDrawSingle(FRAG_CYMATIC, 'cymatic', songT, (P)=>{
+    const g=GL;
+    g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, _cymLUTtex); g.uniform1i(glU(P,'uBessel'), 1);
+    g.activeTexture(g.TEXTURE0);                      // restore audio-tex unit (glDrawSingle contract)
+    g.uniform1fv(glU(P,'uCoef'),  coef);
+    g.uniform1f(glU(P,'uScale'), scale);
+    g.uniform1f(glU(P,'uTemp'),  temp);
+    g.uniform1f(glU(P,'uSym'),   sym);
+    g.uniform1f(glU(P,'uNModes'),nModes);
+    // ONE hue family from spectral content; restrained sat/light (colored by its own frequency).
+    const cen = (typeof centroid==='number' && centroid===centroid) ? centroid : 0.4;
+    const flt = (typeof flatness==='number' && flatness===flatness) ? flatness : 0.3;
+    const en  = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0.3;
+    const base = (typeof _keyHue==='number' ? _keyHue : (cen*300+200));
+    const hueDeg = (base + (cen-0.5)*40 + songT*0.6) % 360;
+    g.uniform1f(glU(P,'uHue'),  ((hueDeg%360)+360)%360);
+    g.uniform1f(glU(P,'uSat'),  Math.max(50, Math.min(90, 90 - flt*40)));
+    g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, 40 + en*22)));
   });
 }
 
@@ -4062,6 +4296,22 @@ bindSw('swGenesis', 'genesis', on => {
   if(on){ if(mode !== 'genesis'){ _genPrevMode = mode; setMode('genesis'); } genSnapLatent(); }
   else { if(mode === 'genesis') setMode(_genPrevMode || 'prism'); _genPrevMode = null; }
 });
+// Cymatic = GENESIS sub-mode. State lives in cfg.genMode (NOT a boolean cfg key), so we do NOT
+// route it through bindSw. Direct onclick keeps a single source of truth and writes no junk key.
+{ const el = $('swCymatic'); if(el) el.onclick = () => {
+    const on = cfg.genMode !== 'cymatic';
+    cfg.genMode = on ? 'cymatic' : 'cppn';
+    el.classList.toggle('on', on);
+    const sg = $('swGenesis'); if(sg) sg.classList.toggle('on', on || !!cfg.genesis);
+    if(on){
+      if(typeof buildBesselLUT==='function') buildBesselLUT();   // pay the one-time LUT cost during the tap, not the first frame
+      cfg.genesis = true;
+      if(mode !== 'genesis'){ _genPrevMode = mode; setMode('genesis'); }
+      genSnapLatent();                                           // snap coeffs to current spectrum (no drift-in)
+    }
+    saveCfg(); haptic();
+  };
+}
 bindSw('swHaptic', 'haptics'); bindSw('swWake', 'wake', on => setWake(on));
 bindSw('swAutohide', 'autohide', () => lastActivity = performance.now());
 bindSw('swBig', 'big', on => document.body.classList.toggle('big', on));
@@ -4217,6 +4467,11 @@ function applyCfgToUI(){
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
   [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
+  // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
+  { const onC = cfg.genMode === 'cymatic';
+    const el = $('swCymatic'); if(el) el.classList.toggle('on', onC);
+    if(onC){ cfg.genesis = true; const sg = $('swGenesis'); if(sg) sg.classList.add('on');
+      if(typeof mode!=='undefined' && mode !== 'genesis'){ _genPrevMode = mode; setMode('genesis'); } } }
   if($('setLang')) $('setLang').value = cfg.lang;
   if($('setBlendMode')) $('setBlendMode').value = cfg.blendMode;
   if($('setBlendPalette')) $('setBlendPalette').value = cfg.blendPalette;
@@ -4276,7 +4531,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
