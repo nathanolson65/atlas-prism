@@ -2039,23 +2039,41 @@ const _cymRaw  = new Float32Array(CYM_NMODES);   // this-frame target
 const _cymCoef = new Float32Array(CYM_NMODES);   // smoothed -> uploaded
 let _cymSeed = null;                             // dedicated seed (do NOT reuse _genWeightSeed)
 let _cymLastSongT = 0;
+let _cymCen = 0.4;                               // smoothed contrast-centroid -> the focus mode (spectral sync)
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
   const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
-  // 1) map 24 bands -> 16 modes (contiguous slice per mode), gentle high-mode rolloff, gate by floor.
+  // 1) SPECTRAL-SYNC mapping (the fix for "the figure stayed the same shape while the Hz changed"):
+  //    fBands are log/AGC'd, which FLATTENS the spectrum -> the old contiguous-slice map + rolloff +
+  //    resting floor collapsed to modes [0..3] regardless of frequency. Instead: contrast-enhance
+  //    (subtract the spectral floor -> undo AGC so the actual PEAK shows), compute a contrast-centroid
+  //    that tracks WHERE the energy is, and FOCUS the active modes around it. Rising frequency content
+  //    (e.g. a filter sweep) -> the focus mode rises -> few big rings/petals morph into fine high-order
+  //    lacework. The figure now literally follows the song's frequency.
+  let mn=1e9, mx=0; for(let b=0;b<NB;b++){ const v=fBands[b]||0; if(v<mn)mn=v; if(v>mx)mx=v; }
+  let cnum=0, cden=0;
+  for(let b=0;b<NB;b++){ const ce=Math.max(0,(fBands[b]||0)-mn); const w=ce*ce; cnum+=b*w; cden+=w; }
+  const cenInst = cden>1e-6 ? (cnum/cden)/(NB-1) : 0.4;
+  if(_genSnap) _cymCen = cenInst;                  // snap the focus on seek/restart (no drift-in)
+  else { const ac = 1 - Math.pow(0.80, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymCen += (cenInst-_cymCen)*ac; }
+  const foc = Math.pow(Math.max(0,Math.min(1,_cymCen)), 0.9) * (CYM_NMODES-1);   // focus mode 0..15
+  const sigma = 2.8;
   for(let k=0;k<CYM_NMODES;k++){
     const b0 = Math.floor(k * NB / CYM_NMODES);
     const b1 = Math.max(b0+1, Math.floor((k+1) * NB / CYM_NMODES));
     let sum=0, cnt=0;
-    for(let b=b0;b<b1 && b<NB;b++){ sum += (fBands[b]||0); cnt++; }
-    let v = cnt ? sum/cnt : 0;
-    v = Math.tanh(v * 1.6) * (1.0 - k*0.022);     // compress + low-mode dominance (clean geometry)
-    if(liteLoad) v *= (1.0 - k*0.04);             // LITE under load: bias toward low (n,m) — the filigree aliases worst
+    for(let b=b0;b<b1 && b<NB;b++){ sum += Math.max(0,(fBands[b]||0)-mn); cnt++; }   // contrast-enhanced slice energy
+    const e = cnt ? sum/cnt : 0;
+    const dk = k - foc, win = Math.exp(-(dk*dk)/(2*sigma*sigma));   // follow the spectral centroid
+    let v = (e*0.45 + win*0.55) * (1.0 - k*0.008);                 // blend timbre detail + focus; gentle rolloff
+    if(liteLoad) v *= (1.0 - k*0.04);
+    v = Math.tanh(v * 2.6);
     _cymRaw[k] = v < CYM_AFLOOR ? 0 : v;
   }
-  // 1b) resting fundamental: mode (0,1) never fully dies -> calm breathing medallion in silence (deterministic).
-  const songT = (typeof _cymLastSongT==='number') ? _cymLastSongT : 0;
-  _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + 0.04*Math.sin(songT*0.25));
+  // 1b) resting fundamental ONLY in TRUE silence (so the live spectrum, not a fixed ring, drives the figure).
+  const _rms = (typeof audioRMS==='number') ? audioRMS : 0;
+  if(mx < 0.06 || _rms < 0.015){ const songT=(typeof _cymLastSongT==='number')?_cymLastSongT:0;
+    _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + 0.04*Math.sin(songT*0.25)); }
   // 2) keep only the top-K largest (energy>0.7 allows one extra), zero the rest.
   let kDraw = CYM_KDRAW;
   if(typeof LITE!=='undefined' && LITE) kDraw = liteLoad ? 2 : 3;   // LITE caps K at 3, drops to 2 under load
@@ -4740,7 +4758,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
