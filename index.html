@@ -699,6 +699,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>Depth plates <span class="sub">(2.5D parallax layers — near=bass, far=treble, slow camera/tilt)</span></label><div class="sw" id="swParallax"></div></div>
       <div class="row"><label>Scanline glitch <span class="sub">(waveform tears the frame + slit-scan smear on hits)</span></label><div class="sw" id="swGlitch"></div></div>
       <div class="row"><label>Optical-flow sparks <span class="sub">(particles stream along the actual on-screen motion)</span></label><div class="sw" id="swFlow"></div></div>
+      <div class="row"><label>✴ GENESIS field <span class="sub">(the song rendered AS a seeded neural-field equation — crisp iso-contour sacred geometry, generative)</span></label><div class="sw" id="swGenesis"></div></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -855,6 +856,7 @@ const cfg = Object.assign({
   // SOTA Wave 5 (free-canvas) — all default OFF
   duck:false, audioSym:false, beatSnap:false, kinetic:false, keyColor:false, hpss:false,
   warpMesh:false, parallax:false, glitch:false, flow:false,
+  genesis:false,   // GENESIS toggle: swaps INTO the song-as-equation neural-field mode; restores prev mode when off
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
@@ -1558,7 +1560,9 @@ function glProg(key, fragBody){
   return (_glProgs[key]={prog:p, uni:{}});
 }
 function glResize(){
-  const cap=LITE?900:1280, longest=Math.max(W,H), sc=Math.min(1, cap/longest) * (cfg.adaptiveQ ? Math.max(0.5,qScale) : 1);
+  const genActive = (typeof mode!=='undefined' && mode==='genesis');
+  const cap = LITE ? (genActive ? 540 : 900) : (genActive ? 1100 : 1280);   // GENESIS caps harder (per-pixel neural field)
+  const longest=Math.max(W,H), sc=Math.min(1, cap/longest) * (cfg.adaptiveQ ? Math.max(0.5,qScale) : 1);
   const w=Math.max(16,(W*sc)|0), h=Math.max(16,(H*sc)|0);
   if(w!==_glw||h!==_glh){ _glw=w; _glh=h; _glcv.width=w; _glcv.height=h; }
 }
@@ -1584,7 +1588,7 @@ function glSetUniforms(P, tt){
 let _glMsgT=0;
 function glNotice(msg){ ctx.fillStyle='#0a0a0c'; ctx.fillRect(0,0,W,H); ctx.fillStyle=hsl(t*30,0.8); ctx.font='600 '+Math.min(28,W*0.04)+'px -apple-system,Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowBlur=0; ctx.fillText(msg, W/2, H/2); ctx.textAlign='left'; }
 // render a single-pass GL fragment effect, then composite into the 2D pattern target (ctx)
-function glDrawSingle(fragBody, key, tt){
+function glDrawSingle(fragBody, key, tt, cb){            // + optional cb(P): extra uniform uploads (GENESIS)
   if(!glInit()){ glNotice('WebGL2 unavailable on this device'); return; }
   glResize();
   const P=glProg(key, fragBody);
@@ -1594,8 +1598,241 @@ function glDrawSingle(fragBody, key, tt){
   g.useProgram(P.prog); g.bindVertexArray(_glVAO);
   g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D,_glAudioTex);
   glSetUniforms(P, tt); g.disable(g.BLEND);
+  if(cb) cb(P);                                          // runs AFTER glSetUniforms (can override uHue/uSat/uLight)
   g.drawArrays(g.TRIANGLES,0,3);
   try{ ctx.drawImage(_glcv, 0,0, W,H); }catch(_){}
+}
+
+/* ====================== GENESIS — song-as-equation neural field ======================
+   Deterministic per-pixel CPPN (seeded MLP) over kaleidoscope-folded coords + a 24-float
+   audio LATENT. ONE net eval/pixel -> smooth field -> CRISP iso-contour line-art + analytic
+   ring guides (sacred-geometry medallion on black). Color is LATENT-DRIVEN (the draw cb
+   overrides uHue/uSat/uLight). Weights are CPU-precomputed (seeded PCG) into a FLOAT TEXTURE,
+   fetched via texelFetch (no uniform-vector pressure -> mobile-safe). Net: 24 -> 16 -> 16 -> 3. */
+const GEN_LAT = 24, GEN_H1 = 16, GEN_H2 = 16;
+const GEN_W1 = GEN_LAT*GEN_H1, GEN_B1 = GEN_H1;
+const GEN_W2 = GEN_H1*GEN_H2,  GEN_B2 = GEN_H2;
+const GEN_W3 = GEN_H2*3,       GEN_B3 = 3;
+const GEN_WTOT = GEN_W1+GEN_B1+GEN_W2+GEN_B2+GEN_W3+GEN_B3;
+const GEN_OW1=0, GEN_OB1=GEN_OW1+GEN_W1, GEN_OW2=GEN_OB1+GEN_B1,
+      GEN_OB2=GEN_OW2+GEN_W2, GEN_OW3=GEN_OB2+GEN_B2, GEN_OB3=GEN_OW3+GEN_W3;
+const GEN_TEXW = 1024;
+const FRAG_GENESIS = `
+#define LAT ${GEN_LAT}
+#define H1  ${GEN_H1}
+#define H2  ${GEN_H2}
+#define TEXW ${GEN_TEXW}
+#define OW1 ${GEN_OW1}
+#define OB1 ${GEN_OB1}
+#define OW2 ${GEN_OW2}
+#define OB2 ${GEN_OB2}
+#define OW3 ${GEN_OW3}
+#define OB3 ${GEN_OB3}
+uniform sampler2D uWtex;
+uniform float uLatent[LAT];
+uniform float uSeed;
+uniform float uScale;
+uniform float uTemp;
+uniform float uSym;
+float W(int i){ return texelFetch(uWtex, ivec2(i % TEXW, i / TEXW), 0).r; }
+vec2 kfold(vec2 q, float n){
+  if(n < 1.5) return q;
+  float a = atan(q.y, q.x), rr = length(q);
+  float seg = 6.28318530718 / n;
+  a = mod(a, seg);
+  a = abs(a - 0.5*seg);
+  return vec2(cos(a), sin(a)) * rr;
+}
+void genesis_net(in float inp[LAT], out float oStruct, out float oHue, out float oVal){
+  float h1[H1];
+  for(int j=0;j<H1;j++){
+    float s = W(OB1+j);
+    for(int i=0;i<LAT;i++) s += W(OW1 + j*LAT + i) * inp[i];
+    h1[j] = tanh(s);
+  }
+  float h2[H2];
+  for(int j=0;j<H2;j++){
+    float s = W(OB2+j);
+    for(int i=0;i<H1;i++) s += W(OW2 + j*H1 + i) * h1[i];
+    h2[j] = tanh(s);
+  }
+  float o0=W(OB3+0), o1=W(OB3+1), o2=W(OB3+2);
+  for(int i=0;i<H2;i++){
+    float hv = h2[i];
+    o0 += W(OW3 + 0*H2 + i) * hv;
+    o1 += W(OW3 + 1*H2 + i) * hv;
+    o2 += W(OW3 + 2*H2 + i) * hv;
+  }
+  oStruct = tanh(o0);
+  oHue    = tanh(o1)*0.5+0.5;
+  oVal    = tanh(o2)*0.5+0.5;
+}
+void main(){
+  vec2 uvr = (gl_FragCoord.xy*2.0 - iResolution) / min(iResolution.x, iResolution.y);
+  vec2 p = kfold(uvr * uScale, uSym);
+  float r = length(p), ang = atan(p.y, p.x);
+  float inp[LAT];
+  inp[0]=p.x; inp[1]=p.y; inp[2]=r; inp[3]=sin(ang*3.0);
+  inp[4]=cos(ang*2.0); inp[5]=sin(r*4.0 + uLatent[0]*3.0);
+  inp[6]=cos(r*6.0 - iTime*0.12); inp[7]=sin(ang*5.0 + uLatent[1]*2.0);
+  for(int i=8;i<LAT;i++) inp[i] = uLatent[i];
+  float fld, hueN, valN;
+  genesis_net(inp, fld, hueN, valN);
+  float NB = 5.0 + uLatent[3]*6.0;
+  float fv = fld*0.5+0.5;
+  float band = fract(fv*NB);
+  float d = abs(band - 0.5)*2.0;
+  float lw = mix(0.16, 0.045, clamp(uTemp,0.,1.));
+  float line = 1.0 - smoothstep(0.0, lw, d);
+  float band2 = fract(fv*NB*2.0 + 0.5);
+  float line2 = (1.0 - smoothstep(0.0, lw*0.6, abs(band2-0.5)*2.0)) * 0.45;
+  float field = max(line, line2);
+  float guide = 0.0;
+  for(int k=1;k<5;k++){
+    float rad = 0.22 + float(k)*0.17;
+    guide = max(guide, 1.0 - smoothstep(0.0, lw*1.2, abs(r - rad)));
+  }
+  field = max(field, guide*0.55);
+  float discR = length(uvr*uScale);
+  float disc = 1.0 - smoothstep(0.92*uScale, 1.12*uScale, discR);
+  field *= disc;
+  float hueArg = hueN*0.30 + r*0.10 - iTime*0.01 + uLatent[2]*0.20;
+  vec3 col = pal(hueArg) * field * (0.55 + 0.75*valN);
+  col = floor(col*5.0 + 0.5)/5.0;
+  col += pal(hueArg+0.5) * pow(line, 3.0) * 0.5;
+  col = col/(col + 0.85);
+  fragColor = vec4(col, 1.0);
+}`;
+const GEN_MFCC_N = 8;
+const _genMfcc = new Float32Array(GEN_MFCC_N);
+function computeMFCC(){
+  const NB = fBands.length;
+  for(let k=0;k<GEN_MFCC_N;k++){
+    let s=0;
+    for(let n=0;n<NB;n++){ const logp = Math.log(1e-4 + fBands[n]); s += logp * Math.cos(Math.PI * k * (n + 0.5) / NB); }
+    _genMfcc[k] = Math.tanh(s / NB);
+  }
+  return _genMfcc;
+}
+const GEN_DIM = 32;
+const _genFull = new Float32Array(GEN_DIM);
+const _genTgt  = new Float32Array(GEN_DIM);
+const LATENT   = new Float32Array(GEN_LAT);
+let _genSnap = true;
+function genSnapLatent(){ _genSnap = true; }
+const _gc  = (v) => (v!==v) ? 0 : (v<-3?-3 : v>3?3 : v);
+const _g01 = (v) => (v!==v) ? 0 : (v<0?0 : v>1?1 : v);
+function buildLatent(){
+  const mf = computeMFCC(); const T = _genTgt;
+  T[0]=_gc(Q.low*2-0.3);          T[1]=_gc(Q.mid*2-0.3);
+  T[2]=((_keyHue%360)+360)%360/360;
+  T[3]=_gc(centroid*2-1);         T[4]=_gc(flatness*2-1);
+  T[5]=_gc(audioRMS*3-0.5);       T[6]=_gc(onsetEnv*2-0.4);
+  T[7]=_gc(kickEnv*2-0.3);        T[8]=_gc(snareEnv*2-0.3);
+  T[9]=_gc(hatEnv*2-0.3);         T[10]=_gc((stereoWidth||0)*2-0.4);
+  T[11]=_gc(TLFO.sin);            T[12]=_gc(TLFO.bar*2-1);
+  T[13]=_gc((Q.flux||0)*2-0.3);   T[14]=_gc(Q.energy*2-0.5);
+  T[15]=_gc((_keyMode||0)*2-1);
+  for(let i=0;i<GEN_MFCC_N;i++) T[16+i]=_gc(mf[i]*1.5);
+  let q0=0,q1=0,q2=0,q3=0; for(let i=0;i<12;i++){ const v=_chromaN[i]||0; if(i<3)q0+=v; else if(i<6)q1+=v; else if(i<9)q2+=v; else q3+=v; }
+  T[24]=_gc(q0*4-1); T[25]=_gc(q1*4-1); T[26]=_gc(q2*4-1); T[27]=_gc(q3*4-1);
+  T[28]=_gc((_keyConfS||0)*2-1);  T[29]=_gc(Q.high*2-0.3);
+  T[30]=_gc(centroid*1.5-0.7);    T[31]=_gc((TLFO.twitch||0)*2-1);
+  if(_genSnap){ for(let i=0;i<GEN_DIM;i++) _genFull[i]=T[i]; _genSnap=false; }
+  else { const a = 1 - Math.pow(0.86, _dtf||1); for(let i=0;i<GEN_DIM;i++) _genFull[i] += (T[i]-_genFull[i]) * a; }
+  for(let i=0;i<GEN_LAT;i++) LATENT[i] = _genFull[i];
+  return LATENT;
+}
+const _genWbuf = new Float32Array(GEN_WTOT);
+let _genWtex = null, _genWeightSeed = null, _genWtexUploaded = -1;
+function _pcg(st){
+  let s = st.s >>> 0; s = (Math.imul(s, 747796405) + 2891336453) >>> 0;
+  let word = ((s >>> ((s >>> 28) + 4)) ^ s) >>> 0; word = Math.imul(word, 277803737) >>> 0;
+  st.s = s; return ((word >>> 22) ^ word) >>> 0;
+}
+function genSeedFromString(str){
+  let h = 0x811c9dc5 >>> 0; const s = (str || 'ATLAS_GENESIS_DEFAULT');
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return (h >>> 0) || 0x9e3779b9;
+}
+function _genCurrentSeed(){
+  let id = 'ATLAS_GENESIS_DEFAULT';
+  try{
+    if(typeof queue!=='undefined' && queue.length && typeof qIndex!=='undefined' && queue[qIndex]){
+      const trk = queue[qIndex]; id = (trk.id || trk.url || trk.title || trk.name || id);
+    } else if(currentSrc==='yt' && typeof ytVideoId!=='undefined' && ytVideoId){ id = 'yt:'+ytVideoId; }
+    else if(currentSrc==='track' && trackBuffer){ id = 'track:'+trackBuffer.duration.toFixed(2); }
+    else if(currentSrc==='stream' && typeof streamEl!=='undefined' && streamEl && streamEl.src){ id = 'st:'+streamEl.src; }
+  }catch(_){}
+  return genSeedFromString(id);
+}
+function genEnsureWeights(seed){
+  if(seed === _genWeightSeed) return;
+  const st = { s: seed >>> 0 };
+  const rnd = () => (_pcg(st) / 4294967296);
+  const gauss = (scale) => ((rnd()+rnd()+rnd())/3 - 0.5) * 2 * scale;
+  const w = _genWbuf; let k=0;
+  const fill = (count, scale) => { for(let i=0;i<count;i++) w[k++]=gauss(scale); };
+  fill(GEN_W1, 1.6/Math.sqrt(GEN_LAT)); fill(GEN_B1, 0.6);
+  fill(GEN_W2, 1.4/Math.sqrt(GEN_H1));  fill(GEN_B2, 0.5);
+  fill(GEN_W3, 1.4/Math.sqrt(GEN_H2));  fill(GEN_B3, 0.4);
+  _genWeightSeed = seed;
+}
+/* ---- GENESIS: weight texture (lazy) + per-frame upload + draw fn ---- */
+function _genEnsureWtex(seed){
+  genEnsureWeights(seed);
+  if(!_genWtex){
+    _genWtex = GL.createTexture(); GL.bindTexture(GL.TEXTURE_2D, _genWtex);
+    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
+    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
+    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+    const pad = new Float32Array(GEN_TEXW); pad.set(_genWbuf.subarray(0, Math.min(GEN_WTOT, GEN_TEXW)));
+    GL.texImage2D(GL.TEXTURE_2D, 0, GL.R32F, GEN_TEXW, 1, 0, GL.RED, GL.FLOAT, pad);
+    _genWtexUploaded = seed;
+  } else if(seed !== _genWtexUploaded){
+    const pad = new Float32Array(GEN_TEXW); pad.set(_genWbuf.subarray(0, Math.min(GEN_WTOT, GEN_TEXW)));
+    GL.bindTexture(GL.TEXTURE_2D, _genWtex); GL.texSubImage2D(GL.TEXTURE_2D, 0, 0,0, GEN_TEXW,1, GL.RED, GL.FLOAT, pad);
+    _genWtexUploaded = seed;
+  }
+  return _genWtex;
+}
+function genSongTime(tt){
+  try{
+    if(currentSrc==='track' && trackBuffer && actx) return (actx.currentTime - trackStartedAt);
+    if(currentSrc==='stream' && typeof streamEl!=='undefined' && streamEl && !isNaN(streamEl.currentTime)) return streamEl.currentTime;
+    if(currentSrc==='yt' && typeof _ytPlayer!=='undefined' && _ytPlayer && _ytPlayer.getCurrentTime) return _ytPlayer.getCurrentTime();
+  }catch(_){}
+  return tt;
+}
+function drawGLGenesis(tt){
+  if(!glInit()){ glNotice('GENESIS needs WebGL2 — try another pattern'); return; }
+  const seed = _genCurrentSeed();
+  if(seed !== _genWeightSeed) genSnapLatent();
+  _genEnsureWtex(seed);
+  const lat = buildLatent();
+  const songT = genSongTime(tt);
+  let sym = Math.max(1, Math.min(8, (cfg.symmetry|0) || 1));
+  if(LITE) sym = Math.min(6, sym);
+  const scale = 2.2 + (LATENT[5]||0)*0.3;
+  const temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);
+  glDrawSingle(FRAG_GENESIS, 'genesis', songT, (P)=>{
+    const g=GL;
+    g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, _genWtex); g.uniform1i(glU(P,'uWtex'), 1);
+    g.activeTexture(g.TEXTURE0);
+    g.uniform1fv(glU(P,'uLatent'), lat);
+    g.uniform1f(glU(P,'uSeed'), (seed>>>0)/4294967296);
+    g.uniform1f(glU(P,'uScale'), scale);
+    g.uniform1f(glU(P,'uTemp'), temp);
+    g.uniform1f(glU(P,'uSym'), sym);
+    const flat = _g01((_genFull[4]||0)*0.5+0.5);
+    const bright = _g01((LATENT[3]||0)*0.5+0.5);
+    const energy = _g01((LATENT[14]||0)*0.5+0.5);
+    const hueDeg = ((LATENT[2]||0)*360 + (_genFull[24]-_genFull[26])*40) % 360;
+    g.uniform1f(glU(P,'uHue'),  ((hueDeg%360)+360)%360);
+    g.uniform1f(glU(P,'uSat'),  Math.max(45, 100 - flat*55));
+    g.uniform1f(glU(P,'uLight'),Math.max(30, Math.min(70, 36 + bright*26 + energy*8)));
+  });
 }
 
 /* ---- GL validation / bonus effect: Spectral Bloom — a radial audio plasma reading FFT per-angle ---- */
@@ -2084,7 +2321,7 @@ const draws = {
   scope:drawScope,
   glbloom:drawGLBloom, julia:drawGLJulia, mandelbox:drawGLMandelbox, cubetunnel:drawGLTunnel,
   voronoi:drawGLVoronoi, truchet:drawGLTruchet, marble:drawGLMarble, flame:drawGLFlame,
-  grayscott:drawRD, fluid:drawFluid, curlflow:drawCurl,
+  grayscott:drawRD, fluid:drawFluid, curlflow:drawCurl, genesis:drawGLGenesis,
   liquidsky:drawLiquidSky,
 };
 
@@ -2248,6 +2485,7 @@ function computeTempo(){
 
 /* shared per-frame Wave-5 state */
 let _symEff=1, _duck=1, _pendingMode=null, _symDrive=0;
+let _genPrevMode=null;   // GENESIS: mode to restore when the toggle is turned off
 /* #21 downbeat-snapped switching: defer programmatic pattern changes to the next beat */
 function requestMode(m){
   if(cfg.beatSnap && cfg.transitions && !cfg.reduce && laserOn && playing && audioReactive){ _pendingMode=m; }
@@ -2376,6 +2614,7 @@ function stopDemo(){ if(synthTimer){ clearInterval(synthTimer); synthTimer = nul
 
 /* ---- track (decoded buffer) + mic sources ---- */
 function startTrackNode(offset){
+  if(typeof genSnapLatent==='function') genSnapLatent();   // GENESIS: snap the latent on (re)start/seek → deterministic, no drift-in
   stopTrackNode();
   trackGain = actx.createGain();
   trackGain.gain.value = cfg.xfade ? 0 : 1;
@@ -3260,6 +3499,7 @@ function loop(){
     let _rt = t;                                                // render time fed to each pattern — channel B can run it in REVERSE so the overlay counter-spins
     const safe = (fn) => { try{ fn(_rt); }catch(_){} };   // one bad pattern frame never kills the loop
     const drawOne = (fn) => {
+      if(mode === 'genesis'){ safe(fn); return; }            // GENESIS self-folds from cfg.symmetry; never outer-kaleidoscope it
       const N = Math.max(1, _symEff | 0);                     // SOTA #12: audio-driven symmetry count
       if(N <= 1) safe(fn);
       else for(let k = 0; k < N; k++){   // kaleidoscopic mirror symmetry
@@ -3521,7 +3761,7 @@ const MODE_CLASSES = [
   { name:'Grid & Field',     modes:[['matrix','⊞','Matrix'],['hexgrid','⬢','Hex Grid'],['starfield','✶','Starfield']] },
   { name:'Waves & Fluid',    modes:[['metaballs','⬭','Metaballs'],['waveform','〜','Waveform'],['scope','⊙','Scope'],['liquidsky','☵','Liquid Sky'],['lissajous','∞','Lissajous'],['plasma','▒','Plasma'],['ripples','◌','Ripples']] },
   { name:'Audio Bars',       modes:[['spectrumfan','✺','Spectrum Fan'],['spectrogram','◉','Polar Spectrogram'],['bars','▮','Spectrum Bars'],['radial','☀','Radial Bars']] },
-  { name:'GPU · WebGL',      modes:[['glbloom','✸','Spectral Bloom'],['julia','❉','Julia Set'],['mandelbox','◰','Mandelbox IFS'],['cubetunnel','◉','Volumetric Tunnel'],['voronoi','⬡','Voronoi Spectro'],['truchet','╳','Truchet Maze'],['marble','〰','Domain Marble'],['flame','🜂','Fractal Flame'],['grayscott','🦠','Reaction-Diffusion'],['fluid','🌊','Fluid Smoke'],['curlflow','✦','Curl Particles']] },
+  { name:'GPU · WebGL',      modes:[['glbloom','✸','Spectral Bloom'],['julia','❉','Julia Set'],['mandelbox','◰','Mandelbox IFS'],['cubetunnel','◉','Volumetric Tunnel'],['voronoi','⬡','Voronoi Spectro'],['truchet','╳','Truchet Maze'],['marble','〰','Domain Marble'],['flame','🜂','Fractal Flame'],['grayscott','🦠','Reaction-Diffusion'],['fluid','🌊','Fluid Smoke'],['curlflow','✦','Curl Particles'],['genesis','✴','Genesis · song equation']] },
 ];
 const MODE_INFO = {}; MODE_CLASSES.forEach(c => c.modes.forEach(m => { MODE_INFO[m[0]] = { glyph:m[1], label:m[2] }; }));
 function saveModeSettings(m){ modeSettings[m] = { b:manualBrightness, s:manualSpeed, i:manualIntensity, h:manualHue, gl:manualGlow, th:manualThick, de:manualDensity }; LS.set('modeSettings', modeSettings); }
@@ -3734,6 +3974,7 @@ function commitSeek(e){
   if(!seeking) return; seeking = false;
   seekFrac = seekFracFromEvent(e); paintSeek(seekFrac);          // commit at the ACTUAL release point (robust to a fast flick where the last move lagged)
   _seekHoldUntil = performance.now() + 350;                       // hold the knob here briefly so updateSeek() doesn't snap it back before currentTime catches up
+  if(typeof genSnapLatent==='function') genSnapLatent();   // GENESIS: snap latent on any seek
   if(currentSrc === 'stream' && streamEl && streamEl.duration){ try{ streamEl.currentTime = seekFrac * streamEl.duration; }catch(_){} }   // native seek (instant)
   else if(currentSrc === 'track' && trackBuffer) startTrackNode(seekFrac * trackBuffer.duration);   // decoded buffer: restart the node at the dragged spot
   else if(currentSrc === 'yt' && _ytPlayer){ try{ _ytPlayer.seekTo(seekFrac * (_ytDur || _ytPlayer.getDuration() || 0), true); }catch(_){} }   // YouTube embed seek
@@ -3817,6 +4058,10 @@ bindSw('swStrobe', 'strobe'); bindSw('swParticles', 'particles'); bindSw('swFeed
 // SOTA Wave 5 toggles
 bindSw('swDuck', 'duck'); bindSw('swAudioSym', 'audioSym'); bindSw('swBeatSnap', 'beatSnap'); bindSw('swKinetic', 'kinetic'); bindSw('swKeyColor', 'keyColor'); bindSw('swHpss', 'hpss');
 bindSw('swWarpMesh', 'warpMesh'); bindSw('swParallax', 'parallax', on => { if(on) dpEnsureTilt(); }); bindSw('swGlitch', 'glitch'); bindSw('swFlow', 'flow');
+bindSw('swGenesis', 'genesis', on => {
+  if(on){ if(mode !== 'genesis'){ _genPrevMode = mode; setMode('genesis'); } genSnapLatent(); }
+  else { if(mode === 'genesis') setMode(_genPrevMode || 'prism'); _genPrevMode = null; }
+});
 bindSw('swHaptic', 'haptics'); bindSw('swWake', 'wake', on => setWake(on));
 bindSw('swAutohide', 'autohide', () => lastActivity = performance.now());
 bindSw('swBig', 'big', on => document.body.classList.toggle('big', on));
@@ -3970,7 +4215,7 @@ function applyCfgToUI(){
   document.body.classList.toggle('reduce', cfg.reduce);
   [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   if($('setLang')) $('setLang').value = cfg.lang;
   if($('setBlendMode')) $('setBlendMode').value = cfg.blendMode;
@@ -4031,7 +4276,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
