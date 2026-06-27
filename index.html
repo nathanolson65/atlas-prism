@@ -744,6 +744,9 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◈ — Cell bloom <span class="sub">(#19 luminous pop on the brightest cells)</span></label><input type="range" class="prng" id="setCymCellBloom" min="0" max="100" value="0"></div>
       <div class="row"><label>◈ — Oil-slick sheen <span class="sub">(#20 thin-film iridescence micro-shift)</span></label><input type="range" class="prng" id="setCymIrid" min="0" max="100" value="0"></div>
       <div class="row"><label>◉ Laser frame (SIM) <span class="sub">(the SIM→LIVE bridge: preview the exact vector frame a galvo laser would trace — {F=0} contour as polylines + live point budget)</span></label><div class="sw" id="swCymLaser"></div></div>
+      <div class="row"><label>◉ — Laser mandala <span class="sub">(v67: trace the FULL water-cell mandala — concentric ring level-sets + the nodal skeleton — as a Helios-shaped laser frame: analog RGB, slew-ordered strokes, blanking + a live point-budget governor. Needs ◉ Laser frame above; off = v57 nodal-only. Rings appear when 🌊 Water cells is on)</span></label><div class="sw" id="swCymLaserGalvo"></div></div>
+      <div class="row"><label>◉ — Scan amplitude <span class="sub">(±deg at the cube; safety cap 4.3°. Documentary in the SIM)</span></label><input type="range" class="prng" id="setCymScanCap" min="0" max="4.3" step="0.1" value="4"></div>
+      <div class="row"><label>◉ — Laser power <span class="sub">(brightness of the traced frame; 100 = full)</span></label><input type="range" class="prng" id="setCymLaserPower" min="0" max="100" value="100"></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -916,6 +919,9 @@ const cfg = Object.assign({
   cymDisc:82,          // v56-8: medallion disc inner edge; 82 = v54. lower = bigger figure / less negative space
   cymRest:0,           // v56-9: resting-figure style 0=ring 1=flower 2=concentric-rings
   cymLaser:false,      // v57: LASER FRAME (SIM) — preview the exact vector frame the galvo laser would trace
+  cymLaserGalvo:false, // v67: LASER MANDALA — full Helios frame (rings {phase=int} + nodal {F=0} + budget governor + analog RGB + scan-cap). Default OFF -> laser SIM byte-identical to v57.
+  cymScanCap:4,        // v67: ±deg scan amplitude at the cube (documentary + future emit map); clamped 0..4.33
+  cymLaserPower:100,   // v67: 0..100 brightness scalar on lit RGB (100 = operator full-bright look)
   // v58 — cymatic organism: 3D depth shell (#3) + tesseract fusion (#2) + kick punch & sync (#4) — ALL inert by default (v57 byte-identical)
   cymDepth:0,          // #3: 0..100 3D dome relief — lifts the flat medallion onto a tilting hemispherical shell (0 = flat v57)
   cymDepthDyn:true,    // #3: dynamic song-driven tilt (a slow nod, bass deepens it) vs a static 3/4 pose; only matters when cymDepth>0
@@ -2250,6 +2256,7 @@ const _cymPing = new Float32Array(CYM_NMODES);     // §7 decaying per-mode atta
 let _cymPingLast = -1;                             // §7 last pinged band (novelty gate)
 // v60 FULL-SONG-SYNC state: snap-reset amplitude EMAs + the deterministic flow accumulator + stereo auto-range.
 let _cymFluxS=0, _cymFlowPh=0, _cymFlowLastT=0, _cymCrisp=0, _cymGlow=0, _cymHat=0, _cymBright=0, _cymEllip=0, _swLo=1, _swHi=0;
+let _lzUHarm=0, _lzChPhase=0, _lzKeyBase=0.55, _lzKeyWarm=0, _lzUFlow=0, _lzUCell=0;   // v67 laser-color stash (set in drawGLCymatic, read by _lzCellHue) — deterministic copy of the shader's cellHue inputs
 // canonical snap-reset EMA: snap to instant on seek, else frame-rate-invariant smooth. (amplitude/color/edge class only — never geometry)
 function cymEMA(prev, tgt, base, snap){ return snap ? tgt : prev + (tgt-prev)*(1 - Math.pow(base,(typeof _dtf==='number'&&_dtf>0)?_dtf:1)); }
 // LITE mode-count budget, hoisted so buildCymCoef() can clamp foc into the rendered index window (shader
@@ -2609,6 +2616,9 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uChPhase'), _chPhase);
     g.uniform1f(glU(P,'uKeyBase'), _uKeyBase);
     g.uniform1f(glU(P,'uKeyWarm'), _uKeyWarm);
+    // v67: stash the EXACT cellHue inputs so the laser mandala colors identically (deterministic; no re-derivation drift; zero shader effect)
+    _lzUHarm=_uHarm; _lzChPhase=_chPhase; _lzKeyBase=_uKeyBase; _lzKeyWarm=_uKeyWarm; _lzUFlow=_uFlow;
+    _lzUCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
     g.uniform1f(glU(P,'uCellPal'), cfg.cymCellPalette?1.0:0.0);
     g.uniform1f(glU(P,'uBgTint'),  cfg.cymBgTint?1.0:0.0);
     g.uniform1f(glU(P,'uMicro'),   (typeof cfg.cymMicro==='number'?cfg.cymMicro:0)/100);
@@ -2623,7 +2633,7 @@ function drawGLCymatic(tt){
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
   drawCymBrain(ctx);
   drawCymTesseract(ctx, songT);   // v56-1: 4D hypercube cage frames the core; songT = deterministic clock
-  drawCymLaserSIM(ctx);           // v57: preview the laser-traceable vector frame (the SIM->LIVE bridge)
+  drawCymLaserSIM(ctx, songT);    // v57/v67: preview the laser-traceable vector frame (the SIM->LIVE bridge); songT = deterministic clock for the galvo cage
 }
 
 /* ============ Phase C — BRAIN CONNECTOGRAM (cymatic "nervous system") ============
@@ -2883,20 +2893,42 @@ function _cymF(x,y,sym){ const p=_cymKfold(x,y,sym); const r=Math.hypot(p[0],p[1
   const ang=Math.atan2(p[1],p[0]); let F=0;
   for(let k=0;k<CYM_NMODES;k++){ const a=_cymCoef[k]; if(a<=0.0005) continue; const n=CYM_MODES[k][0], z=CYM_MODES[k][2];
     F += a*_cymJlut(n, z*r)*Math.cos(n*ang); } return F; }
-let _lzPolys=[], _lzPts=0, _lzBuilt=-1, _lzThrottle=0;
-function _cymBuildLaserPolys(sym, N){
-  const h=2/(N-1), val=new Float32Array(N*N);
-  for(let j=0;j<N;j++) for(let i=0;i<N;i++) val[j*N+i]=_cymF(-1+i*h,-1+j*h,sym);
-  const segs=[];
+// v67 — shader 'phase' field sampler. Ring/cell BOUNDARIES are the INTEGER level-sets {phase=L}.
+// Mirrors FRAG_CYMATIC 2110-2113 EXACTLY except uPunch is OMITTED (live kick env -> non-deterministic
+// geometry = the v58/v59-rejected trap). Deterministic: pure fn of seek-snapped _cymCoef, cfg.cymCell,
+// and the snapped _cymFlowPh (the same value the shader used THIS frame, set @drawGLCymatic before this runs).
+function _cymPhase(x,y,sym){
+  const p=_cymKfold(x,y,sym); const r=Math.hypot(p[0],p[1]);
+  if(r>1.0) return -1e9;                                  // outside disc -> below any level >=0 (no false rim contour)
+  const ang=Math.atan2(p[1],p[0]); let F=0;
+  for(let k=0;k<CYM_NMODES;k++){ const a=_cymCoef[k]; if(a<=0.0005) continue;
+    const n=CYM_MODES[k][0], z=CYM_MODES[k][2]; F += a*_cymJlut(n, z*r)*Math.cos(n*ang); }
+  const aFr = Math.abs(F)*(1.0 + r*2.4);                  // folded r/ang -> rings inherit kfold symmetry
+  const uCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
+  const K = 4.0 + uCell*12.0;                             // un-punched density (uPunch dropped for determinism)
+  const flow=((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) ? _cymFlowPh : 0;   // matches _uFlow gating
+  return aFr*K + r*13.0 - flow*1.6;
+}
+// Fill an N×N grid in [-1,1] from a sampler; also return min/max (for ring level range).
+function _cymFillGrid(sample,N,sym){
+  const h=2/(N-1), grid=new Float32Array(N*N); let lo=Infinity, hi=-Infinity;
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const v=sample(-1+i*h,-1+j*h,sym); grid[j*N+i]=v;
+    if(v>-1e8){ if(v<lo)lo=v; if(v>hi)hi=v; } }
+  return {grid, lo, hi};
+}
+// Generalized marching-squares: extract {grid == L} as ordered, DP-decimated polylines in [-1,1].
+// This is _cymBuildLaserPolys's inner pipeline made level-parametric (subtract L). Identical stitch + DP.
+function _cymContourFromGrid(grid, L, N, dpEps){
+  const h=2/(N-1); const val=grid; const segs=[];
   const itp=(x0,y0,v0,x1,y1,v1)=>{ const t=v0/(v0-v1); return [x0+(x1-x0)*t, y0+(y1-y0)*t]; };
   for(let j=0;j<N-1;j++) for(let i=0;i<N-1;i++){
-    const v00=val[j*N+i],v10=val[j*N+i+1],v11=val[(j+1)*N+i+1],v01=val[(j+1)*N+i];
+    const v00=val[j*N+i]-L, v10=val[j*N+i+1]-L, v11=val[(j+1)*N+i+1]-L, v01=val[(j+1)*N+i]-L;
     if(v00===0&&v10===0&&v11===0&&v01===0) continue;
     let id=0; if(v00>0)id|=1; if(v10>0)id|=2; if(v11>0)id|=4; if(v01>0)id|=8;
     if(id===0||id===15) continue;
     const x0=-1+i*h,x1=-1+(i+1)*h,y0=-1+j*h,y1=-1+(j+1)*h;
-    const B=()=>itp(x0,y0,v00,x1,y0,v10), R=()=>itp(x1,y0,v10,x1,y1,v11), T=()=>itp(x1,y1,v11,x0,y1,v01), L=()=>itp(x0,y1,v01,x0,y0,v00);
-    const cs={1:[[L,B]],2:[[B,R]],3:[[L,R]],4:[[R,T]],5:[[L,T],[B,R]],6:[[B,T]],7:[[L,T]],8:[[T,L]],9:[[T,B]],10:[[T,R],[L,B]],11:[[T,R]],12:[[R,L]],13:[[R,B]],14:[[B,L]]};
+    const B=()=>itp(x0,y0,v00,x1,y0,v10), R=()=>itp(x1,y0,v10,x1,y1,v11), T=()=>itp(x1,y1,v11,x0,y1,v01), Lf=()=>itp(x0,y1,v01,x0,y0,v00);
+    const cs={1:[[Lf,B]],2:[[B,R]],3:[[Lf,R]],4:[[R,T]],5:[[Lf,T],[B,R]],6:[[B,T]],7:[[Lf,T]],8:[[T,Lf]],9:[[T,B]],10:[[T,R],[Lf,B]],11:[[T,R]],12:[[R,Lf]],13:[[R,B]],14:[[B,Lf]]};
     for(const ab of cs[id]) segs.push([ab[0](),ab[1]()]);
   }
   const tol=h*0.6, key=p=>Math.round(p[0]/tol)+','+Math.round(p[1]/tol);
@@ -2912,47 +2944,252 @@ function _cymBuildLaserPolys(sym, N){
     const dx=b[0]-a[0],dy=b[1]-a[1],Lp=dx*dx+dy*dy||1e-9; let md=0,mi=0;
     for(let i=1;i<pl.length-1;i++){ const t=((pl[i][0]-a[0])*dx+(pl[i][1]-a[1])*dy)/Lp, cx=a[0]+t*dx,cy=a[1]+t*dy, d=(pl[i][0]-cx)*(pl[i][0]-cx)+(pl[i][1]-cy)*(pl[i][1]-cy); if(d>md){md=d;mi=i;} }
     if(md>eps*eps){ return dp(pl.slice(0,mi+1),eps).slice(0,-1).concat(dp(pl.slice(mi),eps)); } return [a,b]; };
-  const out=[]; for(const pl of polys){ const d=dp(pl, 0.007); if(d.length>=2) out.push(d); }
+  const out=[]; for(const pl of polys){ const d=dp(pl, dpEps); if(d.length>=2) out.push(d); }
   return out;
 }
-function drawCymLaserSIM(ctx){
+// v67 RINGS: trace the shader's integer phase level-sets {phase = L}. Samples the FULL folded disc once
+// (kfold is inside _cymPhase -> rings are already nf-fold symmetric; NO wedge-replication = no seam gaps).
+// Returns ascending-L levels so the governor can drop the HIGHEST (tightest) first.
+function _cymBuildRingPolys(sym, N){
+  const {grid, lo, hi} = _cymFillGrid(_cymPhase, N, sym);
+  if(!isFinite(lo)||!isFinite(hi)||hi-lo<1e-3) return {levels:[]};
+  const Lmin=Math.ceil(lo), Lmax=Math.floor(hi), maxLevels=(typeof LITE!=='undefined'&&LITE)?12:20;
+  const levels=[]; let drawn=0;
+  for(let L=Lmin; L<=Lmax && drawn<maxLevels; L++, drawn++){
+    const polys=_cymContourFromGrid(grid, L, N, 0.009);
+    if(polys.length) levels.push({level:L, polys});
+  }
+  return {levels};
+}
+let _lzPolys=[], _lzPts=0, _lzBuilt=-1, _lzThrottle=0, _lzFrame=null;
+function _cymBuildLaserPolys(sym, N){   // v67: thin wrapper over the generalized contour core (level 0 = {F=0}); v57-identical output
+  return _cymContourFromGrid(_cymFillGrid(_cymF, N, sym).grid, 0, N, 0.007);
+}
+/* ============ v67 — HELIOS/ILDA FRAME MODEL (SIM-only; NO network this ship) ============
+   The galvo traces ONE ordered point stream with per-point analog RGB + a blank bit — the exact shape of a
+   Helios HeliosPoint[] frame, so a future WebSocket emitter is _LZtoHelios()+send (NOT built this ship). */
+const _LZ_SETTLE=1, _LZ_ENDSETTLE=1;     // blanked dwell points (galvo settle) at stroke start / end (1 each = galvo-plausible, lean blanking)
+function _LZpt(x,y,r,g,b,blank){ return {x,y,r,g,b,blank:!!blank}; }
+// HSL(deg,0..1,0..1) -> [r,g,b] 0..1 (avoids per-point canvas hsl-string parse).
+function _LZhsl(h,s,l){ h=((h%360)+360)%360/360; const a=s*Math.min(l,1-l);
+  const f=k=>{ const x=(k+h*12)%12; return l - a*Math.max(-1,Math.min(x-3,9-x,1)); };
+  return [f(0),f(8),f(4)]; }
+// Greedy nearest-neighbour stroke order (+ optional reverse) -> minimize galvo slew. Deterministic seed:
+// stroke whose start is nearest top-center (0,1). NOT audio-driven. Operates on {p,nodal} (slice drops props).
+function _LZorderStrokes(items){
+  const n=items.length; if(n<=1) return items.map(it=>({p:it.p.slice(),nodal:it.nodal,lvl:it.lvl}));
+  const used=new Uint8Array(n); let cur=0,best=Infinity;
+  for(let i=0;i<n;i++){ const s=items[i].p[0]; const d=s[0]*s[0]+(s[1]-1)*(s[1]-1); if(d<best){best=d;cur=i;} }
+  const out=[{p:items[cur].p.slice(),nodal:items[cur].nodal,lvl:items[cur].lvl}]; used[cur]=1; let end=out[0].p[out[0].p.length-1];
+  for(let k=1;k<n;k++){ let bi=-1,brev=false,bd=Infinity;
+    for(let i=0;i<n;i++){ if(used[i])continue; const a=items[i].p[0], b=items[i].p[items[i].p.length-1];
+      const da=(a[0]-end[0])**2+(a[1]-end[1])**2, db=(b[0]-end[0])**2+(b[1]-end[1])**2;
+      if(da<bd){bd=da;bi=i;brev=false;} if(db<bd){bd=db;bi=i;brev=true;} }
+    const arr=brev?items[bi].p.slice().reverse():items[bi].p.slice();
+    used[bi]=1; out.push({p:arr,nodal:items[bi].nodal,lvl:items[bi].lvl}); end=arr[arr.length-1]; }
+  return out;
+}
+// Flatten ordered strokes -> the single blanked point stream. colorFn(mr,isNodal,lvl)->hue deg.
+// SAFETY: <2-pt strokes dropped (never park a lit beam); all dwell/jump points blank (r=g=b=0).
+function _LZbuildPoints(orderedItems, powerCap, colorFn){
+  const out=[]; let blanks=0, strokes=0;
+  for(let s=0;s<orderedItems.length;s++){ const it=orderedItems[s], pl=it.p; if(!pl||pl.length<2) continue;
+    const start=pl[0];
+    if(s>0){ out.push(_LZpt(start[0],start[1],0,0,0,true)); blanks++; }              // jump-blank to start
+    for(let d=0; d<_LZ_SETTLE; d++){ out.push(_LZpt(start[0],start[1],0,0,0,true)); blanks++; }  // start settle
+    for(let i=0;i<pl.length;i++){ const x=pl[i][0], y=pl[i][1], mr=Math.min(1,Math.hypot(x,y));
+      const [r,g,b]=_LZhsl(colorFn(mr,it.nodal,it.lvl), 1.0, it.nodal?0.30:0.56);     // full sat; nodal dim, rings bright
+      out.push(_LZpt(x,y, r*powerCap, g*powerCap, b*powerCap, false)); }
+    const e=pl[pl.length-1];
+    for(let d=0; d<_LZ_ENDSETTLE; d++){ out.push(_LZpt(e[0],e[1],0,0,0,true)); blanks++; }       // end settle
+    strokes++;
+  }
+  if(out.length){ const lp=out[out.length-1]; out.push(_LZpt(lp.x,lp.y,0,0,0,true)); blanks++; }  // trailing blank (loop wrap off)
+  return {pts:out, blanks, strokes};
+}
+function _LZframe(){ return { pts:[], meta:{ pps:30000, fps:30, budget:1000,
+  scanCapDeg:4, strokes:0, levels:0, blanks:0, dropped:[], total:0, overBudget:false, powerCap:1.0 } }; }
+// Govern the assembled geometry to <=1000 pts. Escalate: DP eps (nodal) -> drop highest-|L| ring -> reduce N. Log each cut.
+// buildLevels(N,eps) -> {levels:[{level,polys}]} (level 0 == {F=0}, ALWAYS kept). tessPolys = cage edges, 2-pt polylines in [-1,1].
+const _LZ_STROKE_COST = pl => pl.length + _LZ_SETTLE + _LZ_ENDSETTLE + 1;   // lit pts + start-settle + end-settle + jump-blank
+function _LZgovern(sym, N0, buildLevels, tessPolys, powerCap, colorFn){
+  const f=_LZframe();
+  f.meta.scanCapDeg=Math.max(0, Math.min(4.33, (typeof cfg.cymScanCap==='number'?cfg.cymScanCap:4)));
+  f.meta.powerCap=powerCap;
+  let N=N0, epsI=0; const epsSteps=[0.007,0.011,0.016,0.022];
+  const dropLevels=new Set(); let minPts=2;
+  const minN=(typeof LITE!=='undefined'&&LITE)?48:64;
+  // assemble {p,nodal,lvl} items. minPts culls tiny NON-nodal strokes only — level-0 nodal is ALWAYS kept.
+  const assemble=(built)=>{ const items=[];
+    for(const lv of built.levels){ if(dropLevels.has(lv.level)) continue;
+      for(const p of lv.polys){ if(lv.level===0 || p.length>=minPts) items.push({p, nodal: lv.level===0, lvl: lv.level}); } }
+    if(tessPolys) for(const p of tessPolys) items.push({p, nodal:false, lvl:1});   // cage edges (ring-colored)
+    return items; };
+  const finish=(built, bp)=>{ f.pts=bp.pts; f.meta.blanks=bp.blanks; f.meta.strokes=bp.strokes;
+    f.meta.levels=built.levels.filter(l=>!dropLevels.has(l.level)).length;
+    f.meta.total=bp.pts.length; f.meta.overBudget=bp.pts.length>f.meta.budget; return f; };
+  // The escalation ladder is monotonic and terminates in the hard-cull (which always returns); 64 is a defensive cap well above the true max (~32).
+  for(let pass=0; pass<64; pass++){
+    const built=buildLevels(N, epsSteps[epsI]);            // {levels:[{level,polys}]}
+    const bp=_LZbuildPoints(_LZorderStrokes(assemble(built)), powerCap, colorFn);
+    if(bp.pts.length<=f.meta.budget) return finish(built, bp);
+    // ESCALATE in fixed order, logging each cut:
+    if(epsI<epsSteps.length-1){ epsI++; f.meta.dropped.push('eps→'+epsSteps[epsI].toFixed(3)); continue; }
+    if(minPts<8){ minPts++; f.meta.dropped.push('minPts→'+minPts); continue; }   // cull short NON-nodal strokes (kills blanking overhead)
+    let drop=null; for(const lv of built.levels){ if(lv.level===0||dropLevels.has(lv.level)) continue;
+      if(drop===null || Math.abs(lv.level)>Math.abs(drop)) drop=lv.level; }
+    if(drop!==null){ dropLevels.add(drop); f.meta.dropped.push('ring L'+drop); continue; }
+    if(N>minN){ const o=N; N=Math.max(minN, N-((typeof LITE!=='undefined'&&LITE)?12:16)); f.meta.dropped.push('N '+o+'→'+N); continue; }
+    // HARD CULL (terminal — always returns): keep nodal + longest strokes that fit; force-keep at least one; LOG.
+    { const built2=buildLevels(N, epsSteps[epsI]); const items2=assemble(built2);
+      items2.sort((a,b)=> (b.nodal-a.nodal) || (b.p.length-a.p.length));   // nodal first, then longest
+      const kept=[]; let cost=1;                                          // 1 = trailing blank
+      for(const it of items2){ const c=_LZ_STROKE_COST(it.p);
+        if(cost+c>f.meta.budget){ if(kept.length===0){ kept.push(it); cost+=c; } continue; }   // force-keep ≥1 stroke
+        cost+=c; kept.push(it); }
+      const culled=items2.length-kept.length;
+      const bp2=_LZbuildPoints(_LZorderStrokes(kept), powerCap, colorFn);
+      f.meta.levels=built2.levels.filter(l=>!dropLevels.has(l.level)).length;
+      f.pts=bp2.pts; f.meta.blanks=bp2.blanks; f.meta.strokes=bp2.strokes;
+      f.meta.total=bp2.pts.length; f.meta.overBudget=bp2.pts.length>f.meta.budget;
+      if(culled>0) f.meta.dropped.push('culled '+culled+' strokes');
+      return f; }
+  }
+  return f;
+}
+// DEAD this ship (documents the trivial future Helios emit; NEVER called). Cap + calibration applied AT EMIT only.
+function _LZtoHelios(frame){ const cap=frame.meta.scanCapDeg/4.33;
+  return { pps:frame.meta.pps, numPoints:frame.meta.total, points:frame.pts.map(p=>({
+    x:Math.round((p.x*cap*0.5+0.5)*0xFFF), y:Math.round((p.y*cap*0.5+0.5)*0xFFF),
+    r:p.blank?0:Math.round(p.r*255), g:p.blank?0:Math.round(p.g*255), b:p.blank?0:Math.round(p.b*255),
+    i:p.blank?0:255 })) }; }
+const _lzFract = x => x - Math.floor(x);
+// v67 color: per-stroke hue mirroring FRAG_CYMATIC cellHue (2132-2135), in DEGREES. isNodal -> dim boundary
+// family; ring -> the bright radial-rainbow/harmony color the shader paints THAT ring (full sat applied downstream).
+function _lzCellHue(mr, isNodal, lvl){
+  const r=Math.min(1, mr);
+  if(isNodal){ return ((220 + r*140)|0); }                 // nodal {F=0}: v57 freq arc; rendered dim (L=0.30) when galvo on
+  const rainbow=_lzFract(r*1.5);
+  // shader uses floor(phase)*0.07 and on a ring contour {phase=L} -> floor(phase)=L exactly. Use the contour LEVEL (not a re-derived phase that varies along the ring).
+  const harmHue=_lzFract(_lzKeyBase + (_lzKeyWarm-0.5)*0.10 + _lzChPhase + Math.floor(lvl||0)*0.07 + r*0.6*_lzUHarm);
+  let cellHue=rainbow + (harmHue-rainbow)*Math.min(1,Math.max(0,_lzUHarm))*0.5;   // mix()
+  const uIrid=(typeof cfg.cymIrid==='number'?cfg.cymIrid:0)/100;
+  if(uIrid>0.001) cellHue += Math.sin(r*22.0 + _lzUFlow*0.5)*0.03*uIrid;          // ang term dropped (per-ring)
+  cellHue=((cellHue%1)+1)%1;
+  return (cellHue*360)|0;
+}
+// v67: DETERMINISTIC tesseract cage for the laser frame, in [-1,1]. The live _tssP is EMA'd over Q (seek-UNreproducible),
+// so the galvo frame must NOT bake it in — recompute from FIXED plane rates * the seek-snapped songT (pure fn of songT).
+function _lzTessPolys(songT){
+  if(!cfg.cymTesseract || typeof _tssV==='undefined') return null;
+  const spin = cfg.cymTessSpin!==false, speed=(typeof cfg.cymTessSpeed==='number'?cfg.cymTessSpeed:50)/50, sT=(typeof songT==='number')?songT:0;
+  const RATES=[0.05,0.04,0.07,0.045,0.06,0.05];                          // fixed deterministic plane rates (NOT live Q)
+  const A = spin ? [RATES[0]*speed*sT,RATES[1]*speed*sT,RATES[2]*speed*sT,RATES[3]*speed*sT,RATES[4]*speed*sT,RATES[5]*speed*sT] : _TSS_STATIC;
+  const distW=2.6, distZ=3.6, fitN=0.50/0.44;                            // fit/R so the cage lands where the on-screen draw put it
+  const c0=Math.cos(A[0]),s0=Math.sin(A[0]),c1=Math.cos(A[1]),s1=Math.sin(A[1]),c2=Math.cos(A[2]),s2=Math.sin(A[2]),
+        c3=Math.cos(A[3]),s3=Math.sin(A[3]),c4=Math.cos(A[4]),s4=Math.sin(A[4]),c5=Math.cos(A[5]),s5=Math.sin(A[5]);
+  const P=new Float32Array(16*2);
+  for(let v=0;v<16;v++){ let x=_tssV[v*4],y=_tssV[v*4+1],z=_tssV[v*4+2],w=_tssV[v*4+3],t;
+    t=x*c0-y*s0;y=x*s0+y*c0;x=t; t=x*c1-z*s1;z=x*s1+z*c1;x=t; t=x*c2-w*s2;w=x*s2+w*c2;x=t;
+    t=y*c3-z*s3;z=y*s3+z*c3;y=t; t=y*c4-w*s4;w=y*s4+w*c4;y=t; t=z*c5-w*s5;w=z*s5+w*c5;z=t;
+    const k4=1/Math.max(0.35,distW-w); const X=x*k4,Y=y*k4,Z=z*k4; const k3=1/Math.max(0.35,distZ-Z);
+    P[v*2]=X*k3*fitN; P[v*2+1]=-Y*k3*fitN; }
+  const polys=[]; for(let e=0;e<32;e++){ const i=_tssE[e*2],j=_tssE[e*2+1]; polys.push([[P[i*2],P[i*2+1]],[P[j*2],P[j*2+1]]]); }
+  return polys;
+}
+function drawCymLaserSIM(ctx, songT){
   if(!cfg.cymLaser) return;
   if(!_cymLUT) buildBesselLUT();
   let sym = Math.max(1, Math.min(8,(cfg.symmetry|0)||1)); if(LITE) sym=Math.min(6,sym);
-  _lzThrottle = (_lzThrottle+1) % (LITE?4:2);
-  if(_lzThrottle===0 || _lzBuilt<0){
-    _lzPolys = _cymBuildLaserPolys(sym, LITE?72:96);
-    _lzPts = _lzPolys.reduce((a,p)=>a+p.length,0);
-    _lzBuilt = 1;
+
+  if(!cfg.cymLaserGalvo){
+    // ---------- v57 PATH — byte-identical: {F=0} nodal polylines + tesseract + 2-line HUD ----------
+    _lzThrottle = (_lzThrottle+1) % (LITE?4:2);
+    if(_lzThrottle===0 || _lzBuilt<0){
+      _lzPolys = _cymBuildLaserPolys(sym, LITE?72:96);
+      _lzPts = _lzPolys.reduce((a,p)=>a+p.length,0);
+      _lzBuilt = 1;
+    }
+    const cx=W*0.5, cy=H*0.5, R=Math.min(W,H)*0.44;
+    const prevOp=ctx.globalCompositeOperation; ctx.save();
+    try{
+      ctx.globalCompositeOperation='source-over'; ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(4,5,9,0.62)'; ctx.fillRect(0,0,W,H);   // dim the field -> the vector frame reads as "what the laser traces"
+      ctx.lineWidth=1.4; ctx.lineCap='round'; ctx.lineJoin='round';
+      let prevEnd=null;
+      for(const pl of _lzPolys){
+        let mr=0; for(const p of pl) mr+=Math.hypot(p[0],p[1]); mr/=pl.length;   // mean radius -> freq hue (220..360)
+        const hue=(220+Math.min(1,mr)*140)|0;
+        const s0x=cx+pl[0][0]*R, s0y=cy-pl[0][1]*R;
+        if(prevEnd){ ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.beginPath(); ctx.moveTo(prevEnd[0],prevEnd[1]); ctx.lineTo(s0x,s0y); ctx.stroke(); }  // faint blanking jump
+        ctx.strokeStyle='hsl('+hue+',95%,62%)'; ctx.beginPath();
+        for(let i=0;i<pl.length;i++){ const X=cx+pl[i][0]*R, Y=cy-pl[i][1]*R; if(i)ctx.lineTo(X,Y); else ctx.moveTo(X,Y); }
+        ctx.stroke();
+        prevEnd=[cx+pl[pl.length-1][0]*R, cy-pl[pl.length-1][1]*R];
+      }
+      if(cfg.cymTesseract && typeof _tssP!=='undefined'){     // tesseract edges are already vectors -> laser-native
+        ctx.strokeStyle='hsl(286,82%,66%)'; ctx.lineWidth=1.2;
+        for(let e=0;e<32;e++){ const i=_tssE[e*2], j=_tssE[e*2+1];
+          ctx.beginPath(); ctx.moveTo(_tssP[i*3],_tssP[i*3+1]); ctx.lineTo(_tssP[j*3],_tssP[j*3+1]); ctx.stroke(); }
+      }
+      const total=_lzPts + (cfg.cymTesseract?64:0), ok=total<=1000;
+      ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(10,10,250,48);
+      ctx.fillStyle=ok?'#36e07f':'#ff5a5a'; ctx.font='600 13px ui-monospace,monospace';
+      ctx.fillText('◉ LASER FRAME (SIM)', 20, 31);
+      ctx.fillStyle='#cfe7f5';
+      ctx.fillText(total+' pts · '+_lzPolys.length+' strokes · '+(ok?'fits 1000-pt budget ✓':'over budget'), 20, 49);
+    } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
+    return;
   }
+
+  // ---------- v67 GALVO PATH — full Helios frame: {F=0} nodal + {phase=int} rings, slew-ordered + blanked + budgeted ----------
+  _lzThrottle = (_lzThrottle+1) % (LITE?4:2);
   const cx=W*0.5, cy=H*0.5, R=Math.min(W,H)*0.44;
+  if(_lzThrottle===0 || _lzBuilt<0 || !_lzFrame){
+    const tess = _lzTessPolys(songT);   // v67: DETERMINISTIC cage edges in [-1,1] (NOT the live-EMA'd _tssP)
+    const powerCap=Math.max(0,Math.min(1,(typeof cfg.cymLaserPower==='number'?cfg.cymLaserPower:100)/100));
+    const N0=LITE?72:96, RN0=LITE?88:128;
+    const hasCells=(typeof cfg.cymCell==='number'?cfg.cymCell:0)>0;   // rings only when cells are on -> laser draws what the shader shows
+    const buildLevels=(N,eps)=>{
+      const lvl0=_cymContourFromGrid(_cymFillGrid(_cymF,N,sym).grid, 0, N, eps);
+      const levels=[{level:0, polys:lvl0}];
+      if(hasCells){ const rings=_cymBuildRingPolys(sym, RN0); for(const lv of rings.levels) levels.push(lv); }
+      return {levels};
+    };
+    _lzFrame=_LZgovern(sym, N0, buildLevels, tess, powerCap, _lzCellHue);
+    _lzPolys=[]; _lzPts=_lzFrame.meta.total; _lzBuilt=1;
+  }
+  const f=_lzFrame, m=f.meta;
   const prevOp=ctx.globalCompositeOperation; ctx.save();
   try{
-    ctx.globalCompositeOperation='source-over'; ctx.shadowBlur=0;
-    ctx.fillStyle='rgba(4,5,9,0.62)'; ctx.fillRect(0,0,W,H);   // dim the field -> the vector frame reads as "what the laser traces"
+    ctx.globalCompositeOperation='source-over'; ctx.shadowBlur=0;            // NEVER 'lighter' — refract-safe
+    ctx.fillStyle='rgba(4,5,9,0.62)'; ctx.fillRect(0,0,W,H);
     ctx.lineWidth=1.4; ctx.lineCap='round'; ctx.lineJoin='round';
-    let prevEnd=null;
-    for(const pl of _lzPolys){
-      let mr=0; for(const p of pl) mr+=Math.hypot(p[0],p[1]); mr/=pl.length;   // mean radius -> freq hue (220..360)
-      const hue=(220+Math.min(1,mr)*140)|0;
-      const s0x=cx+pl[0][0]*R, s0y=cy-pl[0][1]*R;
-      if(prevEnd){ ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.beginPath(); ctx.moveTo(prevEnd[0],prevEnd[1]); ctx.lineTo(s0x,s0y); ctx.stroke(); }  // faint blanking jump
-      ctx.strokeStyle='hsl('+hue+',95%,62%)'; ctx.beginPath();
-      for(let i=0;i<pl.length;i++){ const X=cx+pl[i][0]*R, Y=cy-pl[i][1]*R; if(i)ctx.lineTo(X,Y); else ctx.moveTo(X,Y); }
-      ctx.stroke();
-      prevEnd=[cx+pl[pl.length-1][0]*R, cy-pl[pl.length-1][1]*R];
+    let i=0; const n=f.pts.length; let prevLit=null;     // walk the point stream: lit run -> colored stroke; blank gap -> faint jump
+    while(i<n){ const p=f.pts[i];
+      if(p.blank){ let j=i; while(j<n && f.pts[j].blank) j++;
+        if(j<n && prevLit){ const q=f.pts[j]; ctx.strokeStyle='rgba(255,255,255,0.05)';
+          ctx.beginPath(); ctx.moveTo(cx+prevLit.x*R, cy-prevLit.y*R); ctx.lineTo(cx+q.x*R, cy-q.y*R); ctx.stroke(); }
+        i=j; continue; }
+      let k=i; ctx.beginPath();
+      const col='rgb('+(p.r*255|0)+','+(p.g*255|0)+','+(p.b*255|0)+')'; ctx.strokeStyle=col;
+      ctx.moveTo(cx+p.x*R, cy-p.y*R);
+      for(k=i+1;k<n && !f.pts[k].blank;k++){ const c=f.pts[k]; ctx.lineTo(cx+c.x*R, cy-c.y*R); }
+      ctx.stroke(); prevLit=f.pts[k-1]; i=k;
     }
-    if(cfg.cymTesseract && typeof _tssP!=='undefined'){     // tesseract edges are already vectors -> laser-native
-      ctx.strokeStyle='hsl(286,82%,66%)'; ctx.lineWidth=1.2;
-      for(let e=0;e<32;e++){ const i=_tssE[e*2], j=_tssE[e*2+1];
-        ctx.beginPath(); ctx.moveTo(_tssP[i*3],_tssP[i*3+1]); ctx.lineTo(_tssP[j*3],_tssP[j*3+1]); ctx.stroke(); }
-    }
-    const total=_lzPts + (cfg.cymTesseract?64:0), ok=total<=1000;
-    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(10,10,250,48);
+    ctx.strokeStyle='rgba(120,180,255,0.18)'; ctx.setLineDash([4,6]); ctx.lineWidth=1;   // scan-cap field annotation (documentary)
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,6.2831); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(160,200,255,0.55)'; ctx.font='600 11px ui-monospace,monospace';
+    ctx.fillText('±'+m.scanCapDeg.toFixed(1)+'° scan field @ cube', cx-R+6, cy-R+14);
+    const ok=!m.overBudget;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(10,10,310,84);
     ctx.fillStyle=ok?'#36e07f':'#ff5a5a'; ctx.font='600 13px ui-monospace,monospace';
-    ctx.fillText('◉ LASER FRAME (SIM)', 20, 31);
-    ctx.fillStyle='#cfe7f5';
-    ctx.fillText(total+' pts · '+_lzPolys.length+' strokes · '+(ok?'fits 1000-pt budget ✓':'over budget'), 20, 49);
+    ctx.fillText('◉ LASER MANDALA (SIM · Helios)', 20, 31);
+    ctx.fillStyle='#cfe7f5'; ctx.font='12px ui-monospace,monospace';
+    ctx.fillText(m.total+'/'+m.budget+' pts · '+m.strokes+' strokes · '+m.blanks+' blank', 20, 49);
+    ctx.fillText(m.levels+' lvl'+(m.levels===1?'':'s')+' · ±'+m.scanCapDeg.toFixed(1)+'° · '+(m.pps/1000)+'kpps@'+m.fps+'fps', 20, 65);
+    ctx.fillStyle=ok?'#7fcf9f':'#ffb070';
+    ctx.fillText(ok ? (m.dropped.length?('trimmed: '+m.dropped.slice(0,3).join(', ')):'fits 1000-pt budget ✓') : 'OVER BUDGET (no truncation)', 20, 81);
   } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
 }
 
@@ -3500,12 +3737,20 @@ function bandAvg(fLo, fHi){
   return n ? (s / n) / 255 : 0;
 }
 
-// "Strobe on beat" — flash the #strobe overlay on each beat boundary (was referenced but never defined -> pre-v60 bug).
-let _strobeT = 0;
+// "Strobe on beat" — gentle pulse of the #strobe overlay on each beat. Called EVERY frame from loop()
+// (NOT only on beat frames) so a flash ALWAYS decays to 0 — it can never freeze a white veil, and toggling
+// the feature off mid-flash clears cleanly. Capped to a soft pulse (was a 0.85 full-frame white-out).
+let _strobeT = 0, _strobeArm = false;
+const STROBE_PEAK = 0.30;
 function doStrobe(){
   const el = document.getElementById('strobe'); if(!el) return;
-  if(typeof _beatWrapped!=='undefined' && _beatWrapped){ el.style.opacity = '0.85'; _strobeT = 1; }
-  else if(_strobeT > 0){ const k = Math.pow(0.55, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _strobeT *= k; el.style.opacity = String(_strobeT*0.85); if(_strobeT < 0.02){ _strobeT = 0; el.style.opacity = '0'; } }
+  if(_strobeArm && cfg.strobe && !cfg.reduce) _strobeT = 1;   // armed ONLY by a real beat hit while a song is playing (set in analyseAudio) — never the free-running metronome, so it can't strobe when idle/silent
+  _strobeArm = false;
+  if(_strobeT > 0){                                            // decay runs every frame, even when disabled/idle → never freezes a white veil
+    el.style.opacity = String(_strobeT * STROBE_PEAK);
+    _strobeT *= Math.pow(0.55, (typeof _dtf==='number'&&_dtf>0)?_dtf:1);
+    if(_strobeT < 0.02){ _strobeT = 0; el.style.opacity = '0'; }
+  }
 }
 function analyseAudio(){
   if(!analyser || !playing) return;
@@ -3526,7 +3771,7 @@ function analyseAudio(){
     lastBeatT = t;
     flashBeat();
     haptic(8);
-    if(cfg.strobe && !cfg.reduce) doStrobe();
+    _strobeArm = true;                                    // arm the strobe on a REAL beat (this branch runs only while playing with actual audio energy → never strobes idle)
   }
   // SOTA #41: stereo width from L/R spectral difference (0 = mono, →1 = very wide)
   if(_anL){ _anL.getByteFrequencyData(_freqL); _anR.getByteFrequencyData(_freqR);
@@ -4575,6 +4820,7 @@ function loop(){
   computeTempo();                    // SOTA #17: robust beat phase + LFO bank
   computeHPSS();                     // SOTA #56: percussive / harmonic split envelopes
   computeChromaKey();                // SOTA #28/#58/#71: chroma fold + key estimate
+  doStrobe();                        // strobe-on-beat overlay: armed on the beat, decays EVERY frame (never freezes white)
   if(_pendingMode && _beatWrapped){ const _m=_pendingMode; _pendingMode=null; setMode(_m); }   // SOTA #21: apply a queued switch on the beat
 
   // resolve the four parameters: audio-driven when synced+playing, else manual
@@ -5232,6 +5478,9 @@ bindSw('swCymBloom', 'cymBloom', () => { _cymBloomEnv = 0; });
 bindSw('swCymPalette', 'cymPalette');
 bindSw('swCymPureSpectrum', 'cymPureSpectrum');
 bindSw('swCymLaser', 'cymLaser');
+bindSw('swCymLaserGalvo', 'cymLaserGalvo', () => { _lzBuilt=-1; _lzFrame=null; });   // v67: force frame rebuild on toggle
+bindRange('setCymScanCap', 'cymScanCap', () => { _lzBuilt=-1; });
+bindRange('setCymLaserPower', 'cymLaserPower', () => { _lzBuilt=-1; });
 bindRange('setCymDisc', 'cymDisc');
 // v58 cymatic-organism controls: 3D depth shell (#3) + fusion (#2) + kick punch & sync (#4)
 bindRange('setCymDepth', 'cymDepth');
@@ -5429,9 +5678,9 @@ window.addEventListener('offline', () => { updateOnline(); toast('Offline — se
 function applyCfgToUI(){
   document.body.classList.toggle('big', cfg.big);
   document.body.classList.toggle('reduce', cfg.reduce);
-  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync']]
+  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync'],['setCymScanCap','cymScanCap'],['setCymLaserPower','cymLaserPower']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic';
@@ -5498,7 +5747,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v67';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
