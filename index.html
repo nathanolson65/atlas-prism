@@ -713,6 +713,36 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◎ — Pure-spectrum color <span class="sub">(lock the figure's color to its spectrum — bit-reproducible, no song-time drift)</span></label><div class="sw" id="swCymPureSpectrum"></div></div>
       <div class="row"><label>◎ — Medallion size <span class="sub">(disc cut / negative space; lower = bigger figure, higher = tighter medallion)</span></label><input type="range" class="prng" id="setCymDisc" min="40" max="100" value="82"></div>
       <div class="row"><label>◎ — Resting figure <span class="sub">(calm-silence form: ring / flower / concentric rings)</span></label><select class="sel" id="setCymRest"><option value="0">Ring</option><option value="1">Flower</option><option value="2">Concentric rings</option></select></div>
+      <div class="row"><label>◈ — 3D depth shell <span class="sub">(lift the flat medallion onto a tilting dome — real z-depth that refracts UP through the cube; 0 = flat)</span></label><input type="range" class="prng" id="setCymDepth" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Depth motion <span class="sub">(on = a slow song-driven nod, bass deepens it; off = a static 3/4 pose. Needs depth &gt; 0)</span></label><div class="sw" id="swCymDepthDyn"></div></div>
+      <div class="row"><label>◈ — Fuse into cube <span class="sub">(nest the field as a luminous core INSIDE the 4D cage's inner cube — the organism living in the cube. Needs the Tesseract)</span></label><div class="sw" id="swCymFuse"></div></div>
+      <div class="row"><label>◈ — Kick punch <span class="sub">(the figure expands + brightens on the 808/kick — the transient PUNCH today's music needs; 0 = off)</span></label><input type="range" class="prng" id="setCymPunch" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Sync sensitivity <span class="sub">(how hard the figure tracks frequency: low = subtle, high = dramatic morphing; 50 = default)</span></label><input type="range" class="prng" id="setCymSync" min="0" max="100" value="50"></div>
+      <div class="row"><label>◆ — Mode hold <span class="sub">(de-pop: locks the dominant ring so it stops flickering between near-tied modes)</span></label><div class="sw" id="swCymHyst"></div></div>
+      <div class="row"><label>◆ — Smooth fade <span class="sub">(de-pop: modes fade in/out ~300ms instead of popping to dark)</span></label><div class="sw" id="swCymSmooth"></div></div>
+      <div class="row"><label>◆ — Soft gate <span class="sub">(de-pop: boundary modes feather in/out instead of a hard cutoff — keeps clean negative space)</span></label><div class="sw" id="swCymSoftGate"></div></div>
+      <div class="row"><label>◆ — Decompress <span class="sub">(the figure uses its FULL range: bass drops sink to big rings, bright climaxes climb to fine lacework. 0 = v58; ~55-60 recommended)</span></label><input type="range" class="prng" id="setCymDecomp" min="0" max="100" value="0"></div>
+      <div class="row"><label>◆ — Bass pull <span class="sub">(808/sub-bass sinks the figure into big sacred rings. 0 = off; ~50 recommended)</span></label><input type="range" class="prng" id="setCymBass" min="0" max="100" value="0"></div>
+      <div class="row"><label>◆ — Breathing symmetry <span class="sub">(the mirror axis slowly turns + petals breathe — fluidic symmetry, not a frozen integer. 0 = static; ~35 recommended)</span></label><input type="range" class="prng" id="setCymSymBreath" min="0" max="100" value="0"></div>
+      <div class="row"><label>◆ — Ring ping <span class="sub">(optional: the strongest-hitting band lights its matching ring on the transient)</span></label><div class="sw" id="swCymPing"></div></div>
+      <div class="row"><label>🌊 — Water cells <span class="sub">(BassForge/CymaScope look: fill the antinode CELLS instead of just the nodal lines + iridescent color. 0 = line view, ~70 = full water cells)</span></label><input type="range" class="prng" id="setCymCell" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — FULL SONG SYNC <span class="sub">(one tap: turns on the whole orchestra — every aspect of the song drives a distinct part of the mandala. Color=harmony, flow=flux, crisp=percussion, glow=pads, ping=hits, punch=kick, sparkle=hats, oval=stereo, breath=loudness)</span></label><div class="sw" id="swCymSyncAll"></div></div>
+      <div class="row"><label>✦ — Harmony→color <span class="sub">(the song's key + chords paint the rings)</span></label><input type="range" class="prng" id="setCymHarmonyGain" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Flux→flow <span class="sub">(busier passages flow + rotate faster; deterministic)</span></label><input type="range" class="prng" id="setCymFlow" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Perc→crispness <span class="sub">(drums sharpen the cell edges)</span></label><input type="range" class="prng" id="setCymCrisp" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Harmony→glow <span class="sub">(pads/sustained tones breathe a soft bloom)</span></label><input type="range" class="prng" id="setCymGlow" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Hats→sparkle <span class="sub">(hi-hats shimmer the outer rim)</span></label><input type="range" class="prng" id="setCymHat" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Stereo→shape <span class="sub">(stereo width gently ovals the mandala; auto-normalized)</span></label><input type="range" class="prng" id="setCymStereo" min="0" max="100" value="0"></div>
+      <div class="row"><label>✦ — Loudness→breath <span class="sub">(RMS + tempo drive overall brightness + a beat breath)</span></label><input type="range" class="prng" id="setCymBright" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Vivid palette <span class="sub">(#5 CymaScope jewel-tone color for cells)</span></label><div class="sw" id="swCymCellPalette"></div></div>
+      <div class="row"><label>◈ — Indigo ground <span class="sub">(#7 deep blue-violet background so colors pop)</span></label><div class="sw" id="swCymBgTint"></div></div>
+      <div class="row"><label>◈ — Micro-cells <span class="sub">(#11 a finer sub-band layer for fractal density)</span></label><input type="range" class="prng" id="setCymMicro" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Meniscus rim <span class="sub">(#14 bright surface-tension highlight on each cell)</span></label><input type="range" class="prng" id="setCymMeniscus" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Flat tiles <span class="sub">(#15 flatter, stained-glass cell interiors)</span></label><input type="range" class="prng" id="setCymFlat" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Seam clean-up <span class="sub">(#16 anti-alias the kaleidoscope mirror seam)</span></label><input type="range" class="prng" id="setCymSeamAA" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Flower-of-life core <span class="sub">(#17 a sacred-geometry seed motif at the center)</span></label><input type="range" class="prng" id="setCymFOL" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Cell bloom <span class="sub">(#19 luminous pop on the brightest cells)</span></label><input type="range" class="prng" id="setCymCellBloom" min="0" max="100" value="0"></div>
+      <div class="row"><label>◈ — Oil-slick sheen <span class="sub">(#20 thin-film iridescence micro-shift)</span></label><input type="range" class="prng" id="setCymIrid" min="0" max="100" value="0"></div>
       <div class="row"><label>◉ Laser frame (SIM) <span class="sub">(the SIM→LIVE bridge: preview the exact vector frame a galvo laser would trace — {F=0} contour as polylines + live point budget)</span></label><div class="sw" id="swCymLaser"></div></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
@@ -886,6 +916,40 @@ const cfg = Object.assign({
   cymDisc:82,          // v56-8: medallion disc inner edge; 82 = v54. lower = bigger figure / less negative space
   cymRest:0,           // v56-9: resting-figure style 0=ring 1=flower 2=concentric-rings
   cymLaser:false,      // v57: LASER FRAME (SIM) — preview the exact vector frame the galvo laser would trace
+  // v58 — cymatic organism: 3D depth shell (#3) + tesseract fusion (#2) + kick punch & sync (#4) — ALL inert by default (v57 byte-identical)
+  cymDepth:0,          // #3: 0..100 3D dome relief — lifts the flat medallion onto a tilting hemispherical shell (0 = flat v57)
+  cymDepthDyn:true,    // #3: dynamic song-driven tilt (a slow nod, bass deepens it) vs a static 3/4 pose; only matters when cymDepth>0
+  cymFuse:false,       // #2: nest the field INSIDE the 4D cage's inner cube (needs cymTesseract) — the organism living inside the cube
+  cymPunch:0,          // #4: 0..100 kick/transient PUNCH — the figure expands + brightens on the beat (0 = off)
+  cymSync:50,          // #4: 0..100 frequency-tracking aggressiveness (50 = v55 default; low = subtle, high = dramatic morph)
+  // v59 cymatic redesign — decompress + de-pop + fluidity — ALL inert by default (v58 byte-identical)
+  cymHyst:false,       // §1 de-pop: dominant-mode hysteresis latch (no near-tie flips)
+  cymSmooth:false,     // §2 de-pop: asymmetric per-mode EMA (fast attack / slow release)
+  cymSoftGate:false,   // §3 de-pop: top-K-bounded soft skirt instead of hard sort-and-zero
+  cymDecomp:0,         // §4 decompress: 0..100 peak-bin blend + undo-AGC gain + auto-range focus across modes 0-15
+  cymBass:0,           // §5 decompress: 0..100 bass->low-mode pull (808 -> big rings)
+  cymSymBreath:0,      // §6 fluidity: 0..100 kfold axis breathing + sub-integer petal wobble
+  cymPing:false,       // §7 fluidity (optional): per-band attack LOCATION pings the matching ring
+  cymCell:0,           // 🌊 v60 WATER CELLS: antinode-cell fill (0 = nodal-LINE view = v59; 100 = bright filled CELLS + iridescence) — the BassForge/CymaScope water-cymatics look
+  // v60 FULL-SONG-SYNC drivers (every aspect of the song -> one orthogonal visual axis; ALL default-inert)
+  cymHarmonyGain:0,    // chroma+key -> mandala COLOR/palette
+  cymFlow:0,           // spectral flux -> morph/flow speed (deterministic songT-reseeded accumulator)
+  cymCrisp:0,          // HPSS perc -> cell edge crispness
+  cymGlow:0,           // HPSS harm -> soft breathing bloom/glow
+  cymHat:0,            // hi-hat -> fine outer-ring sparkle
+  cymStereo:0,         // stereo width -> gentle L/R ellipticity (auto-normalized, capped 8%)
+  cymBright:0,         // rms + beat breath -> overall brightness (deterministic songT*tempo)
+  // v60 CymaScope VISUAL items (default-inert)
+  cymCellPalette:false,// #5 dedicated vivid CymaScope palette for cells
+  cymBgTint:false,     // #7 dark blue-violet background tint
+  cymMicro:0,          // #11 second finer sub-band layer (micro-cells)
+  cymMeniscus:0,       // #14 bright surface-tension rim on each cell
+  cymFlat:0,           // #15 flatter solid cell interiors
+  cymSeamAA:0,         // #16 anti-alias the kfold mirror seam
+  cymFOL:0,            // #17 flower-of-life center motif
+  cymCellBloom:0,      // #19 threshold bloom on the brightest cells
+  cymIrid:0,           // #20 oil-slick iridescent sheen
+  cymSyncAll:false,    // v60 MASTER 'Full sync' macro — writes the whole orchestra at balanced gains
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
@@ -1888,6 +1952,36 @@ uniform float uFreqColor;        // Phase B: 0 = Phase-A key hue; 1 = per-mode c
 uniform float uSpin;             // v56-2: per-mode differential rotation phase (rad, song-time driven; 0 = static mandala)
 uniform float uHueDrift;         // v56-6: 1 = song-time hue drift on (v54); 0 = pure-spectrum lock
 uniform float uDisc;             // v56-8: medallion inner edge (smoothstep lo); 0.82 = v54
+uniform float uDepth;            // v58 #3: 0 = flat (v57 identical); >0 = lift onto a tilting dome shell
+uniform float uTiltX;            // v58 #3: dome tilt about screen-X (rad)
+uniform float uTiltY;            // v58 #3: dome tilt about screen-Y (rad)
+uniform float uFuse;             // v58 #2: 0 = normal; 1 = nucleus-in-cube (drop guide rings / diffuse glow)
+uniform float uPunch;            // v58 #4: 0..1 transient kick punch — brightens the lines (tonemap caps white-out)
+uniform float uSymBreath;        // v59 §6: kfold mirror-axis rotation (rad). 0 = frozen integer symmetry (v58)
+uniform float uSymWobble;        // v59 §6: fractional kfold-order delta. 0 = v58
+uniform float uCell;             // v60 🌊: antinode-cell water-cymatics fill mix (0 = nodal-LINE view; 1 = bright filled CELLS, dark F=0 boundaries)
+// v60 FULL-SONG-SYNC + CymaScope uniforms (all 0 / neutral by default -> cymCell=0 byte-identical)
+uniform float uFlow;     // b: deterministic flux flow phase
+uniform float uCrisp;    // c: perc -> edge crispness
+uniform float uGlow;     // d: harm -> soft halo bloom
+uniform float uCymHat;   // g: hi-hat -> outer sparkle (uHat is the shared hatEnv uniform — must not redeclare)
+uniform float uBright;   // i: rms+beat -> brightness (1.0 neutral)
+uniform float uPingA;    // e: ping amount
+uniform float uPingR;    // e: ping radius
+uniform float uEllip;    // h: stereo -> ellipticity (pre-fold)
+uniform float uHarm;     // a: chroma harmony gain
+uniform float uChPhase;  // a: dominant-chroma phase
+uniform float uKeyBase;  // a: key hue base
+uniform float uKeyWarm;  // a: major/minor warm-cool
+uniform float uCellPal;  // #5 vivid palette mix
+uniform float uBgTint;   // #7 indigo ground
+uniform float uMicro;    // #11 micro sub-band
+uniform float uMen;      // #14 meniscus rim
+uniform float uCymFlat;  // #15 flat tiles (uFlat is the shared flatness uniform — must not redeclare)
+uniform float uSeamAA;   // #16 seam feather
+uniform float uFOL;      // #17 flower-of-life core
+uniform float uCellBloom;// #19 cell bloom
+uniform float uIrid;     // #20 oil-slick sheen
 
 const float Zk[NMODES] = float[NMODES](
   2.4048, 3.8317, 5.1356, 5.5201, 6.3802, 7.0156, 7.5883, 8.4172,
@@ -1908,6 +2002,16 @@ vec2 kfold(vec2 q, float n){
   return vec2(cos(a), sin(a)) * rr;
 }
 
+vec2 kfoldB(vec2 q, float n, float rot, float dn){
+  if(n < 1.5) return q;
+  float a = atan(q.y, q.x) - rot, rr = length(q);
+  float seg = 6.28318530718 / max(1.6, n + dn);   // clamp denom so a low-n wobble can't toggle the fold on/off
+  a = mod(a, seg);
+  a = abs(a - 0.5*seg);
+  a += rot;
+  return vec2(cos(a), sin(a)) * rr;
+}
+
 float Jlut(float n, float x){
   x = abs(x);
   if(x > XMAX) return 0.0;
@@ -1921,9 +2025,31 @@ float Jlut(float n, float x){
   return mix(a, b, fr);
 }
 
+// #5 vivid CymaScope jewel-tone palette (cosine gradient: cyan->teal->violet->magenta->amber)
+vec3 cymaPal(float t){ return clamp(vec3(0.5)+vec3(0.5)*cos(6.2832*(t+vec3(0.0,0.33,0.67)))*vec3(0.9,0.85,1.0)+vec3(0.05,0.10,0.20), 0.0, 1.0); }
+
 void main(){
   vec2 uvr = (gl_FragCoord.xy * 2.0 - iResolution) / min(iResolution.x, iResolution.y);
-  vec2 p   = kfold(uvr * (uScale / 2.2), uSym);
+  // v58 #3: 3D depth shell — lift the screen point onto a tilting hemispherical dome, re-project with
+  // mild perspective, and depth-shade (near brighter). Uniform branch: when uDepth==0 -> sv==uvr,
+  // depthShade==1 -> bit-identical to v57. One field eval is preserved (we only remap the sample coord).
+  vec2  sv = uvr;
+  float depthShade = 1.0;
+  if(uDepth > 0.001){
+    float rr2 = clamp(dot(uvr, uvr), 0.0, 1.0);
+    float pz  = sqrt(max(0.0, 1.0 - rr2*0.72));        // hemispherical dome height at this screen point
+    vec3  P   = vec3(uvr, pz);
+    float cX=cos(uTiltX), sX=sin(uTiltX);  P.yz = mat2(cX, sX, -sX, cX) * P.yz;   // tilt about screen-X
+    float cY=cos(uTiltY), sY=sin(uTiltY);  P.xz = mat2(cY, sY, -sY, cY) * P.xz;   // tilt about screen-Y
+    vec2  warped = P.xy / (1.0 + 0.18*(1.0 - P.z));      // mild perspective (far side compresses)
+    sv         = mix(uvr, warped, uDepth);
+    depthShade = mix(1.0, 0.50 + 0.50*clamp(P.z*0.5 + 0.5, 0.0, 1.0), uDepth);    // near brighter; capped <=1.0 (only darkens -> no white-out budget added)
+  }
+  sv.x *= (1.0 + uEllip); sv.y *= (1.0 - uEllip);   // v60 h: stereo ellipticity (tiny, pre-fold; uEllip=0 -> identical)
+  vec2 p   = (uSymBreath==0.0 && uSymWobble==0.0)
+           ? kfold(sv * (uScale / 2.2), uSym)                       // v58 path — executed output bit-identical when inert
+           : kfoldB(sv * (uScale / 2.2), uSym, uSymBreath, uSymWobble);
+  if(uFlow!=0.0){ float fs=uFlow*0.12; float cs=cos(fs), sn=sin(fs); p = mat2(cs,-sn,sn,cs)*p; }   // v60 b: flux flow gently rotates the rings (0 -> identical)
   float r   = length(p);
   float ang = (r < 1e-6) ? 0.0 : atan(p.y, p.x);
 
@@ -1954,22 +2080,56 @@ void main(){
   float dist = abs(F) / aw;
   float wcore = mix(2.2, 0.85, clamp(uTemp,0.0,1.0));
   float line  = 1.0 - smoothstep(0.0, wcore, dist);
-  float glow  = (1.0 - smoothstep(0.0, 7.0, dist)) * 0.22;
+  float glow  = (1.0 - smoothstep(0.0, 7.0, dist)) * 0.22 * (1.0 - uFuse*0.45) * (1.0 - uCell*0.85);   // #2: soften diffuse glow when nucleus; v60: suppress the haze in water-cell mode (keep cells crisp)
   float ink   = max(line, glow);
 
   float halfc = 1.0 - smoothstep(0.0, wcore*1.1, abs(abs(F) - 0.5) / aw);
-  ink = max(ink, halfc * (amp < 0.9 ? 0.30 : 0.0));
+  ink = max(ink, halfc * (amp < 0.9 ? 0.30 : 0.0) * (1.0 - uFuse*0.60));
 
   float guide = 0.0;
   for(int g=1; g<5; g++){
     float rad = 0.18 + float(g)*0.16;
     guide = max(guide, 1.0 - smoothstep(0.0, wcore*1.3, abs(r - rad) / (fwidth(r) + 1e-4)));
   }
-  ink = max(ink, guide * 0.42);
+  ink = max(ink, guide * 0.42 * (1.0 - uFuse*0.85));   // #2: drop the outer guide rings inside the cube -> clean core
 
   float discR = length(uvr * (uScale/2.2));
   float disc  = 1.0 - smoothstep(uDisc, uDisc+0.15, discR);   // v56-8: uDisc=0.82 -> v54 medallion
   ink *= disc;
+  ink *= depthShade;                 // v58 #3: dome depth cue (== 1.0 when uDepth==0)
+  ink *= (1.0 + uPunch*0.70);        // v58 #4: kick punch brightens the lines (Reinhard tonemap below caps white-out)
+  // v60 🌊 WATER CELLS: crossfade the nodal-LINE view -> the antinode-CELL (water/bubble) view. Bright filled
+  //   cells where |F| is large (the antinode valleys bubbles freeze in), with the F=0 nodal lines as DARK crisp
+  //   boundaries (cell edges). uCell=0 -> branch skipped -> byte-identical v59 line view.
+  float cellHue = 0.0;
+  if(uCell > 0.001){
+    float aF = abs(F);
+    float aFr   = aF * (1.0 + r*2.4);                             // radial-decay compensation -> cells fill the WHOLE disc
+    float K     = (4.0 + uCell*12.0) * (1.0 - uPunch*0.10);       // density; (f) kick momentarily enlarges the tiles
+    float phase = aFr * K + r * 13.0 - uFlow*1.6;                 // (b) flux FLOW scrolls the concentric bands outward
+    float fb    = fract(phase);
+    float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.06;            // #13 static + (c) perc -> sharper dark boundary
+    float band  = 1.0 - smoothstep(0.40+hard, 0.48, abs(fb - 0.5));
+    float vign  = smoothstep(uDisc+0.04, uDisc-0.30, discR);
+    float core  = smoothstep(0.025, 0.10, aFr);   // light cells at lower field too -> vivid across all loudness (not just drops)
+    float cell  = band * core * vign;
+    cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
+    cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
+    if(uMicro > 0.001){ float fb2=fract(aFr*K*2.7 + r*21.0 - uFlow*1.6); float micro=(1.0-smoothstep(0.42,0.49,abs(fb2-0.5)))*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells
+    float men  = max(0.0, (1.0-smoothstep(0.30,0.40,abs(fb-0.5))) - (1.0-smoothstep(0.40,0.48,abs(fb-0.5)))) * core * vign;   // #14 meniscus rim
+    float halo = (1.0 - smoothstep(0.18, 0.34, abs(fb-0.5))) * core * vign;                                                   // (d) harm glow skirt
+    float ping = (1.0 - smoothstep(0.0, 0.10, abs(r - uPingR))) * uPingA * 0.5;                                               // (e) which ring flashes
+    float shock= uPunch * (1.0 - smoothstep(0.0, 0.22, abs(r - fract(uPunch*1.3)))) * 0.25;                                   // (f) kick shockwave
+    float spk  = 0.0; if(uCymHat > 0.001 && r > 0.55){ float grn=fract(sin(dot(floor(p*38.0), vec2(12.9898,78.233)))*43758.5453); spk = step(0.82, grn) * (0.5+0.5*sin(uFlow*9.0 + grn*6.2832)) * uCymHat * smoothstep(0.55,0.9,r) * 0.35; }   // (g) hat sparkle (outer rim, deterministic)
+    cell *= disc * depthShade * (1.0 + uPunch*0.70) * uBright;    // (i) rms/beat brightness (uBright=1.0 neutral)
+    cell += (halo*uGlow*0.30 + men*uMen*0.45 + ping + shock + spk) * vign;
+    if(uFOL > 0.001 && r < 0.24){ float fol=0.0; for(int i=0;i<6;i++){ float a2=float(i)*1.0472; vec2 c2=vec2(cos(a2),sin(a2))*0.08; fol=max(fol, 1.0-smoothstep(0.072,0.085,length(p-c2))); } fol=max(fol, 1.0-smoothstep(0.072,0.085,length(p))); float fring=fol-(1.0-smoothstep(0.058,0.07,length(p))); cell += max(0.0,fring)*uFOL*0.4*smoothstep(0.24,0.16,r); }   // #17 flower-of-life seed
+    ink = mix(ink, cell*0.85, uCell);                            // line view <-> water-cell view
+    float rainbow = fract(r*1.5 + aF*0.10);                       // v60 default radial rainbow (uHarm=0)
+    float harmHue = fract(uKeyBase + (uKeyWarm-0.5)*0.10 + uChPhase + floor(phase)*0.07 + r*0.6*uHarm);   // (a) harmony paints the rings
+    cellHue = mix(rainbow, harmHue, clamp(uHarm, 0.0, 1.0)*0.5);   // harmony TINTS the vivid radial rainbow (caps at 50% so it never collapses to one key-color = stays multicolor like the photo)
+    cellHue += sin(r*22.0 + ang*uSym + uFlow*0.5) * 0.03 * uIrid; // #20 oil-slick iridescent sheen
+  }
 
   // Phase A hue family (gentle radial drift) — kept as the base; relative offset (pal() adds uHue/360).
   float hueA = r*0.08 + (F*0.5+0.5)*0.04 - iTime*0.008*uHueDrift;
@@ -1978,10 +2138,20 @@ void main(){
   //          Phase-A drift for continuity. The two are in different reference frames ON PURPOSE.
   float hueB = mix(hueA, (domHue - uHue/360.0)*0.85 + hueA*0.15, 0.80);
   float hueArg = mix(hueA, hueB, clamp(uFreqColor, 0.0, 1.0));
-  vec3 col = pal(hueArg) * ink;
-  col = floor(col*5.0 + 0.5) / 5.0;
+  hueArg = mix(hueArg, cellHue, uCell*0.9);   // v60 🌊: DISTINCT quantized per-ring iridescent bands in cell mode (0 when uCell=0 -> byte-identical)
+  vec3 col = mix(pal(hueArg), cymaPal(hueArg), uCellPal*uCell) * ink;   // #5 vivid CymaScope palette in cell mode (uCellPal=0 -> pal, byte-identical)
+  if(uCell > 0.001){ float lv=mix(5.0,9.0,uCell); col=floor(pow(max(col,0.0),vec3(0.8))*lv+0.5)/lv; col=pow(max(col,0.0),vec3(1.0/0.8)); }   // #6 gamma-aware 9-level quantize keeps dim cells visible
+  else { col = floor(col*5.0 + 0.5) / 5.0; }
   col += pal(hueArg + 0.06) * pow(line, 3.0) * 0.40;   // v56-5: near-analogous spark (was +0.5 = 180deg clash)
   col = col / (col + 0.85);
+  if(uCell > 0.001){                                       // v60 🌊: filled cells read DIM after the tonemap -> restore VIVID saturation + a brightness lift
+    float lum = dot(col, vec3(0.299,0.587,0.114));
+    vec3 satd = clamp(mix(vec3(lum), col, 2.8), 0.0, 1.0);  // ~2.8x saturation = vivid CymaScope jewel color
+    col = mix(col, satd * 1.30, uCell*0.92);                // brightness lift (clamp below caps any white-out)
+    float bloomT = smoothstep(0.6, 0.9, dot(col, vec3(0.299,0.587,0.114)));   // #19 threshold bloom on the brightest cells ONLY
+    col += col * bloomT * uCellBloom * 0.5;
+    col += vec3(0.02,0.012,0.05) * uBgTint;                 // #7 deep indigo ground so jewel colors pop
+  }
   col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
 }`;
@@ -2066,6 +2236,21 @@ let _cymLastSongT = 0;
 let _cymCen = 0.4;                               // smoothed contrast-centroid -> the focus mode (spectral sync)
 let _cymBaseHue = 200;     // v56-4/1: palette-routed body base hue, shared with the tesseract
 let _cymBloomEnv = 0;      // v56-3: decaying "drop bloom" envelope (extra modes ignite on a beat+energy)
+let _cymPunchEnv = 0;      // v58 #4: decaying kick/transient PUNCH envelope (instant attack, _dtf decay; reset on snap)
+// v59 cymatic redesign state — all snap-reset in the consolidated _genSnap block inside buildCymCoef.
+let _cymDom = -1, _cymDomHold = 0;                 // §1 hysteresis latch + challenger counter
+let _cymPeak = 0.4;                                // §4 smoothed argmax peak-bin (snap-reset, _dtf-invariant)
+let _cymCenLo = 0.35, _cymCenHi = 0.65;            // §4 auto-range window (snap-reset, _dtf-invariant decay)
+let _cymBassDom = 0;                               // §5 smoothed relative-bass split (snap-reset, _dtf-invariant)
+const _cymPing = new Float32Array(CYM_NMODES);     // §7 decaying per-mode attack-ping buffer
+let _cymPingLast = -1;                             // §7 last pinged band (novelty gate)
+// v60 FULL-SONG-SYNC state: snap-reset amplitude EMAs + the deterministic flow accumulator + stereo auto-range.
+let _cymFluxS=0, _cymFlowPh=0, _cymFlowLastT=0, _cymCrisp=0, _cymGlow=0, _cymHat=0, _cymBright=0, _cymEllip=0, _swLo=1, _swHi=0;
+// canonical snap-reset EMA: snap to instant on seek, else frame-rate-invariant smooth. (amplitude/color/edge class only — never geometry)
+function cymEMA(prev, tgt, base, snap){ return snap ? tgt : prev + (tgt-prev)*(1 - Math.pow(base,(typeof _dtf==='number'&&_dtf>0)?_dtf:1)); }
+// LITE mode-count budget, hoisted so buildCymCoef() can clamp foc into the rendered index window (shader
+// breaks by index: if(k>=N)break, N=uNModes). Desktop = 16 (no clamp); same logic drawGLCymatic uses.
+function cymModeCap(){ return (typeof LITE!=='undefined' && LITE) ? ((typeof dQ==='number' && dQ < 0.7) ? 8 : 10) : CYM_NMODES; }
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
   const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
@@ -2076,14 +2261,56 @@ function buildCymCoef(){
   //    that tracks WHERE the energy is, and FOCUS the active modes around it. Rising frequency content
   //    (e.g. a filter sweep) -> the focus mode rises -> few big rings/petals morph into fine high-order
   //    lacework. The figure now literally follows the song's frequency.
-  let mn=1e9, mx=0; for(let b=0;b<NB;b++){ const v=fBands[b]||0; if(v<mn)mn=v; if(v>mx)mx=v; }
+  let mn=1e9, mx=0, pkB=0; for(let b=0;b<NB;b++){ const v=fBands[b]||0; if(v<mn)mn=v; if(v>mx){ mx=v; pkB=b; } }
+  const bP = pkB/(NB-1);                            // §4: argmax PEAK BIN (0..1) — the non-AGC-flattened, real-range signal
+  // §4 (v59 cymDecomp): undo-AGC GAIN on the centroid weight. _dec=0 -> ce*ce LITERAL (v58 byte-identical, no ULP drift).
+  const _dec  = (typeof cfg.cymDecomp==='number'?cfg.cymDecomp:0)/100;
+  const _gain = 2.0 + _dec*2.0;                     // 2.0 == ce*ce at dec=0
   let cnum=0, cden=0;
-  for(let b=0;b<NB;b++){ const ce=Math.max(0,(fBands[b]||0)-mn); const w=ce*ce; cnum+=b*w; cden+=w; }
+  for(let b=0;b<NB;b++){ const ce=Math.max(0,(fBands[b]||0)-mn); const w=(_dec===0)?ce*ce:Math.pow(ce,_gain); cnum+=b*w; cden+=w; }
   const cenInst = cden>1e-6 ? (cnum/cden)/(NB-1) : 0.4;
-  if(_genSnap) _cymCen = cenInst;                  // snap the focus on seek/restart (no drift-in)
-  else { const ac = 1 - Math.pow(0.80, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymCen += (cenInst-_cymCen)*ac; }
-  const foc = Math.pow(Math.max(0,Math.min(1,_cymCen)), 0.9) * (CYM_NMODES-1);   // focus mode 0..15
-  const sigma = 2.8;
+  if(_genSnap){                                     // snap focus + ALL §4/§5 state on seek/restart (no drift-in)
+    _cymCen = cenInst; _cymPeak = bP; _cymCenLo = _cymCen; _cymCenHi = _cymCen; _cymBassDom = 0;
+  } else {
+    const ac = 1 - Math.pow(0.80, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymCen += (cenInst-_cymCen)*ac;
+    const ap = 1 - Math.pow(0.80, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymPeak += (bP-_cymPeak)*ap;   // §4b snapped peak EMA
+    // §4c auto-range window: instant-EXPAND to new extremes (min/max), slow-CREEP back toward center so the
+    //     window tracks THIS song's centroid span (the stretch denominator). _dtf-invariant; stays in [0,1].
+    const _wr = 1 - Math.pow(0.9994, (typeof _dtf==='number'&&_dtf>0)?_dtf:1);   // ~minutes creep toward center
+    _cymCenLo = Math.min(_cymCen, _cymCenLo + (_cymCen - _cymCenLo)*_wr);
+    _cymCenHi = Math.max(_cymCen, _cymCenHi + (_cymCen - _cymCenHi)*_wr);
+  }
+  // v58 #4: SYNC SENSITIVITY — cfg.cymSync (0..100, 50 = v55 default) sets how aggressively the figure
+  // tracks frequency: higher sync NARROWS the focus window (sigma) and RAISES the focus weight, so the modes
+  // snap hard onto the spectral centroid (dramatic morphing); lower sync spreads them (subtle). The e/win
+  // weights stay paired (sum 1) so contour density is unchanged. At sync==50 sigma==2.8 & wFocus==0.55 -> v55-identical.
+  const _sync  = (typeof cfg.cymSync==='number' ? cfg.cymSync : 50) / 100;   // 0..1
+  // §4d (v59): the canonical focus. _dec<1e-6 -> EXACT v58 (no clamp -> desktop AND LITE byte-identical).
+  let foc;
+  if(_dec < 1e-6){
+    foc = Math.pow(Math.max(0,Math.min(1,_cymCen)), 0.9) * (CYM_NMODES-1);   // focus mode 0..15 (v58)
+  } else {
+    const span      = _cymCenHi - _cymCenLo;
+    const focFeat   = _cymCen*(1-0.55*_dec) + _cymPeak*(0.55*_dec);            // snapped centroid + snapped peak bin
+    const cnB       = span>0.05 ? Math.max(0,Math.min(1,(focFeat-_cymCenLo)/span)) : focFeat;   // auto-range to the song
+    const stretched = Math.max(0, Math.min(1, cnB + (cnB-0.5)*_dec*1.4));      // contrast-stretch across 0..1
+    const focPos    = stretched*_dec + Math.pow(Math.max(0,Math.min(1,_cymCen)),0.9)*(1-_dec);  // crossfade to v58
+    foc = Math.max(0, Math.min(1, focPos)) * (CYM_NMODES-1);
+    foc = Math.min(foc, cymModeCap()-1);            // clamp into the rendered index window (LITE not blank); no-op on desktop
+  }
+  // §5 (v59 cymBass): amplify the bass->low-mode pull (corr(low,cen)=-0.57) via the snapped RELATIVE bass split.
+  const _bassPull = (typeof cfg.cymBass==='number'?cfg.cymBass:0)/100;
+  if(_bassPull > 0){
+    const lo3 = ((fBands[0]||0)+(fBands[1]||0)+(fBands[2]||0))/3;
+    const hi  = (typeof Q!=='undefined' && Q && Q.high===Q.high) ? Q.high : 0;
+    const bassDom = lo3/(lo3+hi+1e-3);              // relative (non-saturated, source-robust)
+    if(!_genSnap){ const ab=1-Math.pow(0.85,(typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymBassDom += (bassDom-_cymBassDom)*ab; }
+    foc = Math.max(0, Math.min(cymModeCap()-1, foc - _cymBassDom*_bassPull*8.0));   // 808 sinks foc up to 8 modes
+  }
+  // Special-case the default so sync=50 reproduces the v55 LITERALS exactly (no ~1-ULP float drift), then ramp.
+  const sigma  = (_sync===0.5) ? 2.8  : 4.2 - _sync*2.8;     // 4.2 (subtle, wide) .. 1.4 (dramatic, tight)
+  const wFocus = (_sync===0.5) ? 0.55 : 0.40 + _sync*0.30;   // 0.40 .. 0.70
+  const wE     = (_sync===0.5) ? 0.45 : 1.0 - wFocus;        // timbre-detail weight (paired, normalized)
   for(let k=0;k<CYM_NMODES;k++){
     const b0 = Math.floor(k * NB / CYM_NMODES);
     const b1 = Math.max(b0+1, Math.floor((k+1) * NB / CYM_NMODES));
@@ -2091,7 +2318,7 @@ function buildCymCoef(){
     for(let b=b0;b<b1 && b<NB;b++){ sum += Math.max(0,(fBands[b]||0)-mn); cnt++; }   // contrast-enhanced slice energy
     const e = cnt ? sum/cnt : 0;
     const dk = k - foc, win = Math.exp(-(dk*dk)/(2*sigma*sigma));   // follow the spectral centroid
-    let v = (e*0.45 + win*0.55) * (1.0 - k*0.008);                 // blend timbre detail + focus; gentle rolloff
+    let v = (e*wE + win*wFocus) * (1.0 - k*0.008);                  // blend timbre detail + focus; gentle rolloff
     if(liteLoad) v *= (1.0 - k*0.04);
     v = Math.tanh(v * 2.6);
     _cymRaw[k] = v < CYM_AFLOOR ? 0 : v;
@@ -2113,6 +2340,35 @@ function buildCymCoef(){
       _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + _restBreath);
     }
   }
+  // §1 (v59 cymHyst): dominant-mode HYSTERESIS — only re-anchor the dominant when a challenger sustains a real
+  //     lead (>25% over 3 frames), killing the ~103/min argmax near-tie flips. Amplitude-domain (boosts _cymRaw);
+  //     the 1.2 normalize still runs after. _genSnap is still true here (consumed at the EMA below) -> seek re-seeds.
+  if(cfg.cymHyst){
+    if(_genSnap){ _cymDom = -1; _cymDomHold = 0; }
+    let am=0; for(let k=1;k<CYM_NMODES;k++) if(_cymRaw[k]>_cymRaw[am]) am=k;   // instant argmax
+    if(_cymDom<0){ _cymDom=am; _cymDomHold=0; }                                // re-seed
+    else if(am!==_cymDom){
+      const chal=_cymRaw[am], inc=_cymRaw[_cymDom]||0;
+      if(chal > inc*1.25 + 0.02){ if(++_cymDomHold>=3){ _cymDom=am; _cymDomHold=0; } } else _cymDomHold=0;
+    } else _cymDomHold=0;
+    _cymRaw[_cymDom] *= 1.12;   // gentle incumbent boost (anti re-rank); normalize runs after
+  }
+  // §7 (v59 cymPing, OPTIONAL/off): the strongest-ATTACKING band lights its matching ring on the transient.
+  //     Novelty-gated (no fixed strobe), capped 0.35, rides the 1.2 normalize (steals brightness, no net ink).
+  //     Amplitude-domain shimmer; _dtf decay like the bloom/punch envelopes; buffer zeroed on seek.
+  if(cfg.cymPing){
+    if(_genSnap){ _cymPing.fill(0); _cymPingLast=-1; }
+    const NBb = (typeof fBandAtk!=='undefined' && fBandAtk) ? fBandAtk.length : NB;
+    let bestB=-1, bestV=0.15;
+    for(let b=0;b<NBb;b++){ const fl=Math.abs((fBandAtk[b]||0)-(fBands[b]||0)); if(fl>bestV){ bestV=fl; bestB=b; } }
+    if(bestB>=0 && bestB!==_cymPingLast){                                  // novelty gate (which ring CHANGES, not a strobe)
+      const km=Math.min(CYM_NMODES-1, Math.floor(bestB*CYM_NMODES/NBb));
+      _cymPing[km]=Math.max(_cymPing[km], Math.min(0.35, bestV));
+      _cymPingLast=bestB;
+    }
+    const dt2=(typeof _dtf==='number'&&_dtf>0)?_dtf:1;
+    for(let k=0;k<CYM_NMODES;k++){ _cymRaw[k]+=_cymPing[k]; _cymPing[k]*=Math.pow(0.74,dt2); }   // ~0.4s shimmer
+  }
   // 2) keep only the top-K largest (energy>0.7 allows one extra), zero the rest.
   let kDraw = CYM_KDRAW;
   if(typeof LITE!=='undefined' && LITE) kDraw = liteLoad ? 2 : 3;   // LITE caps K at 3, drops to 2 under load
@@ -2131,8 +2387,28 @@ function buildCymCoef(){
     if(_cymBloomEnv > 0.15) kDraw += (_cymBloomEnv > 0.5 ? 2 : 1);
   }
   kDraw = Math.min(CYM_NMODES, kDraw);
-  const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);
-  for(let r=kDraw;r<CYM_NMODES;r++) _cymRaw[idx[r]] = 0;
+  // v60 #10: water-cell mode lights MORE modes (denser CymaScope field) — desktop only; soft-gate still bounds runaway.
+  if((typeof cfg.cymCell==='number'?cfg.cymCell:0)>0.001 && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(cfg.cymCell/100*8));
+  const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);   // value-rank (v58 already pays this)
+  if(cfg.cymSoftGate){
+    // §3 (v59): top-K-bounded SOFT skirt — only boundary modes (rank kDraw-1..kDraw+1) feather; everything
+    //     ranked > kDraw+1 is HARD-zeroed, so the shader/SIM 0.0005 per-mode gate can never light > ~kDraw+2
+    //     modes (density-stable, anti-mush). Pure per-frame transform of _cymRaw -> seek-reproducible.
+    const lo = Math.max(0, kDraw-1), hi = Math.min(CYM_NMODES-1, kDraw+1);
+    const top = _cymRaw[idx[0]] || 1e-3;
+    const gateLvl  = _cymRaw[idx[Math.min(kDraw, CYM_NMODES-1)]];
+    const gateSpan = Math.max(1e-3, top - gateLvl);
+    for(let r=0;r<CYM_NMODES;r++){
+      const k = idx[r];
+      if(r < lo) continue;                                   // core spine: keep full weight
+      if(r > hi){ _cymRaw[k] = 0; continue; }                // beyond boundary: hard-zero (density-stable)
+      const s = Math.max(0, Math.min(1, (_cymRaw[k]-gateLvl)/gateSpan + 0.5));
+      _cymRaw[k] *= s*s*(3-2*s);                             // hermite skirt
+      if(_cymRaw[k] < CYM_AFLOOR) _cymRaw[k] = 0;            // hard floor -> clean negative space
+    }
+  } else {
+    for(let r=kDraw;r<CYM_NMODES;r++) _cymRaw[idx[r]] = 0;   // v58 hard top-K
+  }
   // 3) soft-normalize kept set so total contour density is loudness-stable (~1.2 sum).
   let tot=0; for(let k=0;k<CYM_NMODES;k++) tot += _cymRaw[k];
   if(tot > 1e-4){ const sc = 1.2/tot; for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
@@ -2140,9 +2416,20 @@ function buildCymCoef(){
   if(_genSnap){
     for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] = _cymRaw[k];
     _genSnap = false;                              // consume the flag (mirrors buildLatent; restores EMA)
+  } else if(cfg.cymSmooth){
+    // §2 (v59): asymmetric per-mode EMA — fast attack (snappy ignite) / slow release (~300ms glide) so a
+    //     departing mode fades instead of popping to dark. Same _dtf amplitude-smoothing class as v58.
+    const dt = (typeof _dtf==='number' && _dtf>0) ? _dtf : 1;
+    for(let k=0;k<CYM_NMODES;k++){
+      const tgt=_cymRaw[k], cur=_cymCoef[k];
+      const base = (tgt>cur) ? 0.80 : 0.90;   // attack ~0.20/frame, release ~0.10 (~300ms tail)
+      let nv = cur + (tgt-cur)*(1 - Math.pow(base, dt));
+      if(tgt===0 && nv < 0.012) nv = 0;       // snap imperceptible released tails to 0 -> bounds lit-mode count (anti-mush; 0.012->0 is invisible, well above the 0.0005 render gate)
+      _cymCoef[k] = nv;
+    }
   } else {
     const dt = (typeof _dtf==='number' && _dtf>0) ? _dtf : 1;
-    const a = 1 - Math.pow(0.86, dt);
+    const a = 1 - Math.pow(0.86, dt);          // v58 symmetric — byte-identical when off
     for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] += (_cymRaw[k]-_cymCoef[k]) * a;
   }
   return _cymCoef;
@@ -2155,12 +2442,22 @@ function drawGLCymatic(tt){
   _cymEnsureLUT();
   const songT = genSongTime(tt);                     // DETERMINISTIC song time (seek-snapped)
   _cymLastSongT = songT;
+  const _snap0 = _genSnap;                            // v58 #4: capture before buildCymCoef consumes the flag
   const coef = buildCymCoef();                       // consumes _genSnap exactly once
-  let sym = Math.max(1, Math.min(8, (cfg.symmetry|0) || 1));
+  if(_snap0) _cymPunchEnv = 0;                        // reset the kick-punch envelope on seek/restart/seed change
+  let sym = Math.max(1, Math.min(cfg.cymCell>0.001?16:8, (cfg.symmetry|0) || 1));   // v60 🌊: water-cell mode allows up to 16-fold for the dense CymaScope mandala
   if(LITE) sym = Math.min(6, sym);
+  // §6 (v59 cymSymBreath): breathing FRACTIONAL symmetry — the kfold mirror axis slowly turns + the petal count
+  //     breathes sub-integer. Pure songT LFOs (deterministic, seek-snapped), exactly like _tiltX/uSpin. Needs symmetry>=2.
+  let _uSymBreath=0, _uSymWobble=0;
+  const _sb=(typeof cfg.cymSymBreath==='number'?cfg.cymSymBreath:0)/100;
+  if(_sb>0.001){
+    _uSymBreath = Math.sin(songT*0.047)*0.18*_sb*(0.6+0.4*Math.sin(songT*0.019));   // axis rotation (<=0.18 rad)
+    const _wScale = Math.min(1, (sym-1)/4);                                          // low folds breathe less (0 at sym=1)
+    _uSymWobble = Math.sin(songT*0.031+0.7)*0.6*_sb*_wScale;                         // sub-integer petal breath
+  }
   // mode-count lever: LITE renders fewer modes; drops further when the LITE governor lowers dQ.
-  let nModes = CYM_NMODES;
-  if(LITE) nModes = (typeof dQ==='number' && dQ < 0.7) ? 8 : 10;   // phone baseline 10, 8 under load
+  let nModes = cymModeCap();   // phone baseline 10, 8 under load (hoisted so buildCymCoef can clamp foc to this window)
   // Phase D: intensity + live energy bloom the body (more active modes on the drop), CLAMPED to the
   // cap above so it never exceeds the LITE/desktop budget. Same inten*en product drives the brain's
   // edges. Only runs when the organism is engaged -> both toggles off = literal v53 nModes.
@@ -2170,10 +2467,88 @@ function drawGLCymatic(tt){
     const bloom  = Math.round(nModes * (0.6 + 0.4*intenD) + enD*intenD*4);   // up to ~4 extra on the drop
     nModes = Math.max(4, Math.min(nModes, bloom));   // only ever reduces/holds (clamped to the cap)
   }
-  const scale = 2.2;
+  let scale = 2.2;
   let temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
   // v56-7: intensity sharpens lines (raises uTemp toward crisp). 100 = +0 (v54 baseline), lower = softer.
-  { const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100; temp = Math.min(1, temp + (_it-1)*0.25); }
+  const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100; temp = Math.min(1, temp + (_it-1)*0.25);
+  // disc inner edge from cfg.cymDisc (40..100 -> ~0.62..1.05), nudged wider by intensity (also reused by fusion).
+  const uDiscEff = Math.max(0.4, Math.min(1.05, (0.42 + (typeof cfg.cymDisc==='number'?cfg.cymDisc:82)/100*0.488) + (_it-1)*0.06));
+
+  // ---- v58 #2: FUSION — nest the field inside the 4D cage's inner cube (needs cymTesseract). On-screen
+  //      medallion radius == uDiscEff*2.2/scale (fraction of half-min); solve scale so it matches the inner-cube
+  //      radius tracked by drawCymTesseract (one-frame lag, smooth). uFuse then drops the guide rings -> clean core.
+  // Nest the field as a DETERMINISTIC luminous core inside the cage — a fixed fraction of the frame, NOT the
+  // live/reactive tesseract inner radius (which isn't seek-reproducible). The cage still breathes around it.
+  const fused = !!(cfg.cymFuse && cfg.cymTesseract);
+  if(fused){ const innerFrac = 0.33; scale = Math.max(2.2, Math.min(7.0, uDiscEff*2.2/innerFrac)); }
+
+  // ---- v58 #3: DEPTH SHELL tilt — static 3/4 pose, or a DETERMINISTIC song-time nod (bass deepens it). ----
+  const _depth = (typeof cfg.cymDepth==='number'?cfg.cymDepth:0)/100;
+  let _tiltX=0, _tiltY=0;
+  if(_depth>0.001){
+    if(cfg.cymDepthDyn !== false){
+      // DETERMINISTIC nod/yaw — a PURE function of songT (seek-reproducible). The tilt warps the sampled
+      // coords (field GEOMETRY), so it must NOT couple to the live Q bus; a slow secondary LFO supplies the
+      // "breathing" depth motion deterministically instead.
+      _tiltX = 0.34 + Math.sin(songT*0.30)*0.22*(0.62+0.38*Math.sin(songT*0.071));
+      _tiltY = Math.sin(songT*0.21 + 1.3)*0.26*(0.58+0.42*Math.sin(songT*0.053+0.6));
+    } else { _tiltX = 0.42; _tiltY = 0.30; }                        // static 3/4 pose
+  }
+
+  // ---- v58 #4: KICK PUNCH — instant attack on kick/onset, _dtf decay; EXPANDS + brightens the figure. ----
+  let _uPunch = 0;
+  const _punchK = (typeof cfg.cymPunch==='number'?cfg.cymPunch:0)/100;
+  if(_punchK>0){
+    const _kk=(typeof kickEnv==='number')?kickEnv:0, _ons=(typeof onsetEnv==='number')?onsetEnv:0;
+    const _hit=Math.max(_kk, _ons*0.6);
+    if(_hit > _cymPunchEnv) _cymPunchEnv = _hit;                    // instant attack
+    const _dt=(typeof _dtf==='number'&&_dtf>0)?_dtf:1;
+    _cymPunchEnv *= Math.pow(0.80, _dt);                           // fast decay (~150ms tail)
+    _uPunch = _cymPunchEnv * _punchK * (cfg.refract ? 0.6 : 1);     // attenuate the brighten under refract (3x 'lighter' recombine)
+    scale *= (1 - _uPunch*0.16);                                    // smaller scale = bigger figure -> "expands" on the hit
+  }
+  // ===== v60 FULL-SONG-SYNC drivers — each owns ONE orthogonal visual axis; all snap-reset / deterministic =====
+  const _refAtt = cfg.refract ? 0.6 : 1.0;
+  // (b) spectral FLUX -> deterministic FLOW phase. Re-seeded to closed-form songT*base on seek; flux only scales the rate.
+  _cymFluxS = cymEMA(_cymFluxS, (typeof Q!=='undefined'&&Q&&Q.flux===Q.flux)?Q.flux:0, 0.85, _snap0);
+  { const dT=Math.max(0,Math.min(0.1, songT-_cymFlowLastT)); _cymFlowLastT=songT;
+    const flowGain=(typeof cfg.cymFlow==='number'?cfg.cymFlow:0)/100*1.4;
+    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain); }
+  const _uFlow = ((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) ? _cymFlowPh : 0;
+  // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
+  _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
+  _cymGlow   = cymEMA(_cymGlow,   (typeof harmEnv==='number'?harmEnv:0),   0.92, _snap0);
+  _cymHat    = cymEMA(_cymHat,    (typeof hatEnv==='number'?hatEnv:0),     0.78, _snap0);
+  _cymBright = cymEMA(_cymBright, (typeof audioRMS==='number'?audioRMS:0), 0.88, _snap0);
+  const _uCrisp = _cymCrisp * (typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0)/100;
+  const _uGlow  = _cymGlow  * (typeof cfg.cymGlow==='number'?cfg.cymGlow:0)/100 * (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
+  const _uHat   = _cymHat   * (typeof cfg.cymHat==='number'?cfg.cymHat:0)/100;
+  let _uBright = 1.0;
+  if((typeof cfg.cymBright==='number'?cfg.cymBright:0)>0){
+    const _bpm=(typeof currentBPM==='number'&&currentBPM>40&&currentBPM<210)?currentBPM:124;
+    const _bph=(songT*(_bpm/60))%1.0;
+    _uBright = (0.85 + _cymBright*0.55*(cfg.cymBright/100)) * (0.93+0.07*Math.cos(_bph*6.2832)) * _refAtt;   // floor lifted so quiet moments stay vivid, not dim
+  }
+  // (e) ping accent (reuse the snap-reset _cymPing buffer) -> WHICH ring flashes (radius from its Bessel zero)
+  let _pmI=-1,_pmV=0; for(let k=0;k<CYM_NMODES;k++){ if(_cymPing[k]>_pmV){_pmV=_cymPing[k];_pmI=k;} }
+  const _uPingA = (cfg.cymPing && _pmI>=0) ? _pmV : 0;
+  const _uPingR = (cfg.cymPing && _pmI>=0 && typeof CYM_MODES!=='undefined' && CYM_MODES[_pmI]) ? Math.max(0,Math.min(1, 2.4/CYM_MODES[_pmI][2])) : 0;
+  // (h) stereo width -> auto-normalized -> gentle ellipticity (snap-reset; warps a PRE-fold coord, hard-capped 8%)
+  { const sw=(typeof stereoWidth==='number'?stereoWidth:0); const wr=1-Math.pow(0.9994,(typeof _dtf==='number'&&_dtf>0)?_dtf:1);
+    if(_snap0){ _swLo=sw; _swHi=sw; } else { _swLo=Math.min(sw,_swLo+(sw-_swLo)*wr); _swHi=Math.max(sw,_swHi+(sw-_swHi)*wr); } }
+  const _sw=(typeof stereoWidth==='number'?stereoWidth:0);
+  const _swN=(_swHi-_swLo>0.05)?((_sw-_swLo)/(_swHi-_swLo)):0.5;
+  _cymEllip = cymEMA(_cymEllip, _swN-0.5, 0.90, _snap0);
+  const _uEllip = Math.max(-0.5,Math.min(0.5,_cymEllip)) * (typeof cfg.cymStereo==='number'?cfg.cymStereo:0)/100 * 0.08;
+  // (a) chroma+key -> HARMONY hue: dominant-chroma circular mean + key warm/cool + confidence-gated spread
+  let _chPhase=0, _uHarm=0;
+  if((typeof cfg.cymHarmonyGain==='number'?cfg.cymHarmonyGain:0)>0 && typeof _chromaN!=='undefined' && _chromaN){
+    let cx=0,cy=0; for(let p=0;p<12;p++){ const a=p/12*6.2832; cx+=_chromaN[p]*Math.cos(a); cy+=_chromaN[p]*Math.sin(a); }
+    _chPhase=((Math.atan2(cy,cx)/6.2832)+1)%1;
+    _uHarm=((typeof _keyConfS!=='undefined'&&_keyConfS===_keyConfS)?_keyConfS:0.5) * (cfg.cymHarmonyGain/100);
+  }
+  const _uKeyBase = ((typeof _keyHue==='number'?_keyHue:200)/360);
+  const _uKeyWarm = (typeof _keyIsMinor!=='undefined' && _keyIsMinor) ? 1.0 : 0.0;
   glDrawSingle(FRAG_CYMATIC, 'cymatic', songT, (P)=>{
     const g=GL;
     g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, _cymLUTtex); g.uniform1i(glU(P,'uBessel'), 1);
@@ -2206,9 +2581,39 @@ function drawGLCymatic(tt){
     g.uniform1f (glU(P,'uSpin'), songT * ((typeof cfg.cymSpin==='number'?cfg.cymSpin:0)/100) * 0.6);
     // v56-6: pure-spectrum lock kills the shader's iTime hue drift.
     g.uniform1f (glU(P,'uHueDrift'), cfg.cymPureSpectrum ? 0.0 : 1.0);
-    // v56-7/8: disc inner edge from cfg.cymDisc (40..100 -> ~0.62..1.05), nudged wider by intensity.
-    { const _d=(typeof cfg.cymDisc==='number'?cfg.cymDisc:82)/100; const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100;
-      g.uniform1f(glU(P,'uDisc'), Math.max(0.4, Math.min(1.05, (0.42 + _d*0.488) + (_it-1)*0.06))); }
+    // v56-7/8: disc inner edge (precomputed as uDiscEff; fusion reuses the same value).
+    g.uniform1f(glU(P,'uDisc'), uDiscEff);
+    // v58: depth shell (#3) + fusion (#2) + kick punch (#4). All default to 0 -> shader path is v57-identical.
+    g.uniform1f(glU(P,'uDepth'), _depth);
+    g.uniform1f(glU(P,'uTiltX'), _tiltX);
+    g.uniform1f(glU(P,'uTiltY'), _tiltY);
+    g.uniform1f(glU(P,'uSymBreath'), _uSymBreath);   // §6: 0 when cymSymBreath=0 -> shader selects v58 kfold (bit-identical)
+    g.uniform1f(glU(P,'uSymWobble'), _uSymWobble);
+    g.uniform1f(glU(P,'uCell'), (typeof cfg.cymCell==='number'?cfg.cymCell:0)/100);   // v60 🌊 water-cell fill mix
+    g.uniform1f(glU(P,'uFuse'),  fused ? 1.0 : 0.0);
+    g.uniform1f(glU(P,'uPunch'), _uPunch);
+    // ---- v60 full-song-sync + CymaScope uniforms (all default to a neutral value -> cymCell=0 byte-identical) ----
+    g.uniform1f(glU(P,'uFlow'),    _uFlow);
+    g.uniform1f(glU(P,'uCrisp'),   _uCrisp);
+    g.uniform1f(glU(P,'uGlow'),    _uGlow);
+    g.uniform1f(glU(P,'uCymHat'),  _uHat);
+    g.uniform1f(glU(P,'uBright'),  _uBright);
+    g.uniform1f(glU(P,'uPingA'),   _uPingA);
+    g.uniform1f(glU(P,'uPingR'),   _uPingR);
+    g.uniform1f(glU(P,'uEllip'),   _uEllip);
+    g.uniform1f(glU(P,'uHarm'),    _uHarm);
+    g.uniform1f(glU(P,'uChPhase'), _chPhase);
+    g.uniform1f(glU(P,'uKeyBase'), _uKeyBase);
+    g.uniform1f(glU(P,'uKeyWarm'), _uKeyWarm);
+    g.uniform1f(glU(P,'uCellPal'), cfg.cymCellPalette?1.0:0.0);
+    g.uniform1f(glU(P,'uBgTint'),  cfg.cymBgTint?1.0:0.0);
+    g.uniform1f(glU(P,'uMicro'),   (typeof cfg.cymMicro==='number'?cfg.cymMicro:0)/100);
+    g.uniform1f(glU(P,'uMen'),     (typeof cfg.cymMeniscus==='number'?cfg.cymMeniscus:0)/100 * _refAtt);
+    g.uniform1f(glU(P,'uCymFlat'),  (typeof cfg.cymFlat==='number'?cfg.cymFlat:0)/100);
+    g.uniform1f(glU(P,'uSeamAA'),  (typeof cfg.cymSeamAA==='number'?cfg.cymSeamAA:0)/100);
+    g.uniform1f(glU(P,'uFOL'),     (typeof cfg.cymFOL==='number'?cfg.cymFOL:0)/100);
+    g.uniform1f(glU(P,'uCellBloom'),(typeof cfg.cymCellBloom==='number'?cfg.cymCellBloom:0)/100 * _refAtt);
+    g.uniform1f(glU(P,'uIrid'),    (typeof cfg.cymIrid==='number'?cfg.cymIrid:0)/100);
   });
   // Phase C: draw the connectogram on the SAME module-level 2D ctx glDrawSingle composited into.
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
@@ -2284,7 +2689,9 @@ function drawCymBrain(ctx){
       const p=_cgPairIdx(i,j); _cgCov[p] += (di*dj - _cgCov[p]) * a; } }
 
   // ---- geometry: rim ring co-registered over the medallion (disc fades 0.82-0.97 -> ~0.42*min) ----
-  const cx=W*0.5, cy=H*0.5, R=Math.min(W,H)*0.42;
+  // v58 #2: when fused, pull the rim in so the nodes ride the nested core, not the frame (fixed = deterministic, matches the 0.33 field nest).
+  const _bfuse = !!(cfg.cymFuse && cfg.cymTesseract);
+  const cx=W*0.5, cy=H*0.5, R=Math.min(W,H)*0.42 * (_bfuse ? 0.80 : 1);
   let nSlots=0;
   if(NN >= 12){ for(let s=0;s<12;s++) _cgSlots[nSlots++]=CIRCLE5[s]; }
   else {
@@ -2423,7 +2830,9 @@ function drawCymTesseract(ctx, songT){
   const baseHue = (typeof _cymBaseHue==='number') ? _cymBaseHue : 200;
   const cageBright = (typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100;
   // auto-dim when the brain is co-active so shells don't fight; extra dim under refract (3x 'lighter' recombine).
-  const tessDim = (cfg.cymBrain ? 0.75 : 1.0) * (cfg.refract ? 0.7 : 1.0);
+  // v58 #2: when FUSED, the cage is the star -> skip the brain auto-dim and lift it slightly (alpha stays capped).
+  const _fuseOn = !!(cfg.cymFuse && cfg.cymTesseract);
+  const tessDim = (cfg.cymBrain && !_fuseOn ? 0.75 : 1.0) * (cfg.refract ? 0.7 : 1.0) * (_fuseOn ? 1.12 : 1.0);
   const prevOp = ctx.globalCompositeOperation;
   ctx.save();
   try{
@@ -3087,6 +3496,13 @@ function bandAvg(fLo, fHi){
   return n ? (s / n) / 255 : 0;
 }
 
+// "Strobe on beat" — flash the #strobe overlay on each beat boundary (was referenced but never defined -> pre-v60 bug).
+let _strobeT = 0;
+function doStrobe(){
+  const el = document.getElementById('strobe'); if(!el) return;
+  if(typeof _beatWrapped!=='undefined' && _beatWrapped){ el.style.opacity = '0.85'; _strobeT = 1; }
+  else if(_strobeT > 0){ const k = Math.pow(0.55, (typeof _dtf==='number'&&_dtf>0)?_dtf:1); _strobeT *= k; el.style.opacity = String(_strobeT*0.85); if(_strobeT < 0.02){ _strobeT = 0; el.style.opacity = '0'; } }
+}
 function analyseAudio(){
   if(!analyser || !playing) return;
   analyser.getByteFrequencyData(freqData);
@@ -3321,6 +3737,9 @@ function synthScheduler(){
   }
 }
 function startDemo(){
+  stopDemo();                  // IDEMPOTENT: always clear any running scheduler first so a re-call REPLACES,
+                               // never STACKS. Without this, each startDemo() orphans the previous setInterval
+                               // (synthTimer only holds the latest id) -> untrackable "ghost synths" pile up.
   synthStep = 0;
   synthNextT = actx.currentTime + 0.06;
   synthTimer = setInterval(synthScheduler, 25);
@@ -4700,8 +5119,8 @@ seekEl.addEventListener('pointercancel', () => { seeking = false; });
 seekEl.addEventListener('lostpointercapture', () => { seeking = false; });   // safety: never get stuck in a seeking state
 
 /* ---- settings: switches, ranges, palette ---- */
-function bindSw(id, key, after){ const el = $(id); el.onclick = () => { cfg[key] = !cfg[key]; el.classList.toggle('on', cfg[key]); saveCfg(); haptic(); if(after) after(cfg[key]); }; }
-function bindRange(id, key, after){ const el = $(id); el.oninput = () => { cfg[key] = +el.value; setRangeFill(el); saveCfg(); if(after) after(cfg[key]); }; }
+function bindSw(id, key, after){ const el = $(id); if(!el) return; el.onclick = () => { cfg[key] = !cfg[key]; el.classList.toggle('on', cfg[key]); saveCfg(); haptic(); if(after) after(cfg[key]); }; }
+function bindRange(id, key, after){ const el = $(id); if(!el) return; el.oninput = () => { cfg[key] = +el.value; setRangeFill(el); saveCfg(); if(after) after(cfg[key]); }; }
 bindRange('setVol', 'volume', v => { if(actx && masterGain) masterGain.gain.value = v / 100; if(_ytPlayer && _ytPlayer.setVolume){ try{ _ytPlayer.setVolume(v); }catch(_){} } });
 bindRange('setPlayRate', 'playRate', v => { if(trackNode){ try{ trackNode.playbackRate.value = v / 100; }catch(_){} } if(streamEl){ try{ streamEl.playbackRate = v / 100; }catch(_){} } });
 bindRange('setBass', 'bassGain'); bindRange('setMid', 'midGain'); bindRange('setTreble', 'trebleGain');
@@ -4810,6 +5229,50 @@ bindSw('swCymPalette', 'cymPalette');
 bindSw('swCymPureSpectrum', 'cymPureSpectrum');
 bindSw('swCymLaser', 'cymLaser');
 bindRange('setCymDisc', 'cymDisc');
+// v58 cymatic-organism controls: 3D depth shell (#3) + fusion (#2) + kick punch & sync (#4)
+bindRange('setCymDepth', 'cymDepth');
+bindSw('swCymDepthDyn', 'cymDepthDyn');
+bindSw('swCymFuse', 'cymFuse', () => { _tssSnapSeen = null; });   // re-arm the cage so the inner-cube radius re-seeds
+bindRange('setCymPunch', 'cymPunch', () => { _cymPunchEnv = 0; });
+bindRange('setCymSync', 'cymSync');
+// v59 cymatic redesign controls — de-pop (§1-3) + decompress (§4-5) + fluidity (§6-7)
+bindSw('swCymHyst', 'cymHyst', () => { _cymDom = -1; _cymDomHold = 0; });
+bindSw('swCymSmooth', 'cymSmooth');
+bindSw('swCymSoftGate', 'cymSoftGate');
+bindRange('setCymDecomp', 'cymDecomp');
+bindRange('setCymBass', 'cymBass');
+bindRange('setCymSymBreath', 'cymSymBreath');
+bindSw('swCymPing', 'cymPing', () => { _cymPing.fill(0); _cymPingLast = -1; });
+bindRange('setCymCell', 'cymCell');   // v60 🌊 water-cell antinode fill
+// v60 FULL-SONG-SYNC driver binds
+bindRange('setCymHarmonyGain','cymHarmonyGain'); bindRange('setCymFlow','cymFlow'); bindRange('setCymCrisp','cymCrisp');
+bindRange('setCymGlow','cymGlow'); bindRange('setCymHat','cymHat'); bindRange('setCymStereo','cymStereo'); bindRange('setCymBright','cymBright');
+bindSw('swCymCellPalette','cymCellPalette'); bindSw('swCymBgTint','cymBgTint');
+bindRange('setCymMicro','cymMicro'); bindRange('setCymMeniscus','cymMeniscus'); bindRange('setCymFlat','cymFlat');
+bindRange('setCymSeamAA','cymSeamAA'); bindRange('setCymFOL','cymFOL'); bindRange('setCymCellBloom','cymCellBloom'); bindRange('setCymIrid','cymIrid');
+// v60 MASTER 'Full sync' macro — writes the whole orchestra at balanced gains in one tap (each key default-inert, so the build ships unchanged)
+let _cymSyncPrev=null;
+function applyCymFullSync(on){
+  const SET={ cymCell:72, cymHarmonyGain:70, cymFlow:55, cymCrisp:60, cymGlow:45, cymHat:40, cymStereo:30, cymBright:50,
+              cymDecomp:55, cymHyst:true, cymSmooth:true, cymSoftGate:true, cymPing:true, cymPunch:55,
+              cymCellPalette:false, cymBgTint:false, cymMicro:35, cymMeniscus:45, cymFlat:30, cymSeamAA:60, cymFOL:50, cymCellBloom:40, cymIrid:25 };
+  if(on){
+    _cymSyncPrev={}; for(const k in SET) _cymSyncPrev[k]=cfg[k]; _cymSyncPrev.symmetry=cfg.symmetry; _cymSyncPrev.genMode=cfg.genMode;
+    Object.assign(cfg, SET);
+    if((cfg.symmetry|0)<6) cfg.symmetry=8;
+    cfg.genMode='cymatic'; cfg.genesis=true;
+    if(typeof buildBesselLUT==='function') buildBesselLUT();
+    if(typeof mode!=='undefined' && mode!=='genesis' && typeof setMode==='function'){ _genPrevMode=mode; setMode('genesis'); }
+    if(typeof genSnapLatent==='function') genSnapLatent();
+  } else if(_cymSyncPrev){
+    Object.assign(cfg, _cymSyncPrev); _cymSyncPrev=null;
+  }
+  // best-effort UI refresh of the cymatic controls
+  [['setCymCell','cymCell'],['setCymHarmonyGain','cymHarmonyGain'],['setCymFlow','cymFlow'],['setCymCrisp','cymCrisp'],['setCymGlow','cymGlow'],['setCymHat','cymHat'],['setCymStereo','cymStereo'],['setCymBright','cymBright'],['setCymDecomp','cymDecomp'],['setCymMicro','cymMicro'],['setCymMeniscus','cymMeniscus'],['setCymFlat','cymFlat'],['setCymSeamAA','cymSeamAA'],['setCymFOL','cymFOL'],['setCymCellBloom','cymCellBloom'],['setCymIrid','cymIrid']].forEach(([id,k])=>{ const e=$(id); if(e){ e.value=cfg[k]; if(typeof setRangeFill==='function') setRangeFill(e); } });
+  [['swCymHyst','cymHyst'],['swCymSmooth','cymSmooth'],['swCymSoftGate','cymSoftGate'],['swCymPing','cymPing'],['swCymCellPalette','cymCellPalette'],['swCymBgTint','cymBgTint']].forEach(([id,k])=>{ const e=$(id); if(e) e.classList.toggle('on',!!cfg[k]); });
+  saveCfg();
+}
+{ const el=$('swCymSyncAll'); if(el) el.onclick=()=>{ cfg.cymSyncAll=!cfg.cymSyncAll; el.classList.toggle('on',cfg.cymSyncAll); applyCymFullSync(cfg.cymSyncAll); haptic(); }; }
 { const el = $('setCymRest'); if(el){ el.value = String(cfg.cymRest||0); el.onchange = () => { cfg.cymRest = +el.value; saveCfg(); }; } }
 bindSw('swHaptic', 'haptics'); bindSw('swWake', 'wake', on => setWake(on));
 bindSw('swAutohide', 'autohide', () => lastActivity = performance.now());
@@ -4962,9 +5425,9 @@ window.addEventListener('offline', () => { updateOnline(); toast('Offline — se
 function applyCfgToUI(){
   document.body.classList.toggle('big', cfg.big);
   document.body.classList.toggle('reduce', cfg.reduce);
-  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc']]
+  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic';
@@ -5031,7 +5494,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v60';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
