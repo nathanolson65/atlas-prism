@@ -2112,13 +2112,14 @@ void main(){
     float phase = aFr * K + r * 13.0 - uFlow*1.6;                 // (b) flux FLOW scrolls the concentric bands outward
     float fb    = fract(phase);
     float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.06;            // #13 static + (c) perc -> sharper dark boundary
-    float band  = 1.0 - smoothstep(0.40+hard, 0.48, abs(fb - 0.5));
+    float fwb   = fwidth(phase) + 1e-4;                           // pixel footprint of the banding -> ANTI-ALIAS: SHARP lines, no grain (smooths to flat where sub-pixel instead of aliasing)
+    float band  = clamp(((0.40 + hard) - abs(fb - 0.5))/fwb + 0.5, 0.0, 1.0);
     float vign  = smoothstep(uDisc+0.04, uDisc-0.30, discR);
     float core  = smoothstep(0.025, 0.10, aFr);   // light cells at lower field too -> vivid across all loudness (not just drops)
     float cell  = band * core * vign;
     cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
     cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
-    if(uMicro > 0.001){ float fb2=fract(aFr*K*2.7 + r*21.0 - uFlow*1.6); float micro=(1.0-smoothstep(0.42,0.49,abs(fb2-0.5)))*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells
+    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0 - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp((0.42-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp, no grain)
     float men  = max(0.0, (1.0-smoothstep(0.30,0.40,abs(fb-0.5))) - (1.0-smoothstep(0.40,0.48,abs(fb-0.5)))) * core * vign;   // #14 meniscus rim
     float halo = (1.0 - smoothstep(0.18, 0.34, abs(fb-0.5))) * core * vign;                                                   // (d) harm glow skirt
     float ping = (1.0 - smoothstep(0.0, 0.10, abs(r - uPingR))) * uPingA * 0.5;                                               // (e) which ring flashes
@@ -5497,7 +5498,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
