@@ -713,6 +713,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◎ — Pure-spectrum color <span class="sub">(lock the figure's color to its spectrum — bit-reproducible, no song-time drift)</span></label><div class="sw" id="swCymPureSpectrum"></div></div>
       <div class="row"><label>◎ — Medallion size <span class="sub">(disc cut / negative space; lower = bigger figure, higher = tighter medallion)</span></label><input type="range" class="prng" id="setCymDisc" min="40" max="100" value="82"></div>
       <div class="row"><label>◎ — Resting figure <span class="sub">(calm-silence form: ring / flower / concentric rings)</span></label><select class="sel" id="setCymRest"><option value="0">Ring</option><option value="1">Flower</option><option value="2">Concentric rings</option></select></div>
+      <div class="row"><label>◉ Laser frame (SIM) <span class="sub">(the SIM→LIVE bridge: preview the exact vector frame a galvo laser would trace — {F=0} contour as polylines + live point budget)</span></label><div class="sw" id="swCymLaser"></div></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -884,6 +885,7 @@ const cfg = Object.assign({
   cymPureSpectrum:false,// v56-6: drop the song-time hue drift -> color locked to the spectrum (bit-reproducible)
   cymDisc:82,          // v56-8: medallion disc inner edge; 82 = v54. lower = bigger figure / less negative space
   cymRest:0,           // v56-9: resting-figure style 0=ring 1=flower 2=concentric-rings
+  cymLaser:false,      // v57: LASER FRAME (SIM) — preview the exact vector frame the galvo laser would trace
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
@@ -2212,6 +2214,7 @@ function drawGLCymatic(tt){
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
   drawCymBrain(ctx);
   drawCymTesseract(ctx, songT);   // v56-1: 4D hypercube cage frames the core; songT = deterministic clock
+  drawCymLaserSIM(ctx);           // v57: preview the laser-traceable vector frame (the SIM->LIVE bridge)
 }
 
 /* ============ Phase C — BRAIN CONNECTOGRAM (cymatic "nervous system") ============
@@ -2449,6 +2452,94 @@ function drawCymTesseract(ctx, songT){
       ctx.fillStyle='hsla('+(hd|0)+',60%,'+(60+dn*8|0)+'%,'+al.toFixed(3)+')';
       ctx.beginPath(); ctx.arc(x,y,rad,0,6.2831853); ctx.fill();
     }
+  } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
+}
+
+/* ============ v57 — LASER VECTOR ENGINE (the figure as laser-traceable polylines) ============
+   A laser draws VECTORS, not pixels. This extracts the cymatic field's nodal set {F=0} as ordered
+   polylines (marching squares on the SAME F the shader renders), reuses the tesseract edges (already
+   vectors), decimates to a point budget, colors per stroke by frequency, and draws the resulting LASER
+   FRAME back onto the canvas so you see EXACTLY what the galvo would trace. Validated to fit a ~1000
+   point/frame budget at 30kpps. This is the on-screen proof of the room figure (the SIM->LIVE bridge). */
+function _cymJlut(n, x){ x=Math.abs(x); if(x>CYM_XMAX) return 0;
+  const fx=x/CYM_XMAX*(CYM_LUTW-1); const i0=fx|0, i1=Math.min(i0+1,CYM_LUTW-1), fr=fx-i0, base=n*CYM_LUTW;
+  return _cymLUT[base+i0]*(1-fr)+_cymLUT[base+i1]*fr; }
+function _cymKfold(x,y,nf){ if(nf<1.5) return [x,y]; const a0=Math.atan2(y,x), rr=Math.hypot(x,y);
+  const seg=6.28318530718/nf; let a=a0%seg; if(a<0)a+=seg; a=Math.abs(a-0.5*seg); return [Math.cos(a)*rr, Math.sin(a)*rr]; }
+function _cymF(x,y,sym){ const p=_cymKfold(x,y,sym); const r=Math.hypot(p[0],p[1]); if(r>1.0) return 0;
+  const ang=Math.atan2(p[1],p[0]); let F=0;
+  for(let k=0;k<CYM_NMODES;k++){ const a=_cymCoef[k]; if(a<=0.0005) continue; const n=CYM_MODES[k][0], z=CYM_MODES[k][2];
+    F += a*_cymJlut(n, z*r)*Math.cos(n*ang); } return F; }
+let _lzPolys=[], _lzPts=0, _lzBuilt=-1, _lzThrottle=0;
+function _cymBuildLaserPolys(sym, N){
+  const h=2/(N-1), val=new Float32Array(N*N);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++) val[j*N+i]=_cymF(-1+i*h,-1+j*h,sym);
+  const segs=[];
+  const itp=(x0,y0,v0,x1,y1,v1)=>{ const t=v0/(v0-v1); return [x0+(x1-x0)*t, y0+(y1-y0)*t]; };
+  for(let j=0;j<N-1;j++) for(let i=0;i<N-1;i++){
+    const v00=val[j*N+i],v10=val[j*N+i+1],v11=val[(j+1)*N+i+1],v01=val[(j+1)*N+i];
+    if(v00===0&&v10===0&&v11===0&&v01===0) continue;
+    let id=0; if(v00>0)id|=1; if(v10>0)id|=2; if(v11>0)id|=4; if(v01>0)id|=8;
+    if(id===0||id===15) continue;
+    const x0=-1+i*h,x1=-1+(i+1)*h,y0=-1+j*h,y1=-1+(j+1)*h;
+    const B=()=>itp(x0,y0,v00,x1,y0,v10), R=()=>itp(x1,y0,v10,x1,y1,v11), T=()=>itp(x1,y1,v11,x0,y1,v01), L=()=>itp(x0,y1,v01,x0,y0,v00);
+    const cs={1:[[L,B]],2:[[B,R]],3:[[L,R]],4:[[R,T]],5:[[L,T],[B,R]],6:[[B,T]],7:[[L,T]],8:[[T,L]],9:[[T,B]],10:[[T,R],[L,B]],11:[[T,R]],12:[[R,L]],13:[[R,B]],14:[[B,L]]};
+    for(const ab of cs[id]) segs.push([ab[0](),ab[1]()]);
+  }
+  const tol=h*0.6, key=p=>Math.round(p[0]/tol)+','+Math.round(p[1]/tol);
+  const adj=new Map(); segs.forEach((s,si)=>{ for(const p of s){ const k=key(p); let arr=adj.get(k); if(!arr){arr=[];adj.set(k,arr);} arr.push(si); } });
+  const used=new Uint8Array(segs.length), polys=[];
+  for(let si=0;si<segs.length;si++){ if(used[si])continue; used[si]=1; const poly=[segs[si][0],segs[si][1]];
+    let grow=true; while(grow){ grow=false; const end=poly[poly.length-1], cand=adj.get(key(end))||[];
+      for(const ci of cand){ if(used[ci])continue; const s=segs[ci];
+        if(key(s[0])===key(end)){ poly.push(s[1]); used[ci]=1; grow=true; break; }
+        if(key(s[1])===key(end)){ poly.push(s[0]); used[ci]=1; grow=true; break; } } }
+    if(poly.length>=2) polys.push(poly); }
+  const dp=(pl,eps)=>{ if(pl.length<3) return pl; const a=pl[0], b=pl[pl.length-1];
+    const dx=b[0]-a[0],dy=b[1]-a[1],Lp=dx*dx+dy*dy||1e-9; let md=0,mi=0;
+    for(let i=1;i<pl.length-1;i++){ const t=((pl[i][0]-a[0])*dx+(pl[i][1]-a[1])*dy)/Lp, cx=a[0]+t*dx,cy=a[1]+t*dy, d=(pl[i][0]-cx)*(pl[i][0]-cx)+(pl[i][1]-cy)*(pl[i][1]-cy); if(d>md){md=d;mi=i;} }
+    if(md>eps*eps){ return dp(pl.slice(0,mi+1),eps).slice(0,-1).concat(dp(pl.slice(mi),eps)); } return [a,b]; };
+  const out=[]; for(const pl of polys){ const d=dp(pl, 0.007); if(d.length>=2) out.push(d); }
+  return out;
+}
+function drawCymLaserSIM(ctx){
+  if(!cfg.cymLaser) return;
+  if(!_cymLUT) buildBesselLUT();
+  let sym = Math.max(1, Math.min(8,(cfg.symmetry|0)||1)); if(LITE) sym=Math.min(6,sym);
+  _lzThrottle = (_lzThrottle+1) % (LITE?4:2);
+  if(_lzThrottle===0 || _lzBuilt<0){
+    _lzPolys = _cymBuildLaserPolys(sym, LITE?72:96);
+    _lzPts = _lzPolys.reduce((a,p)=>a+p.length,0);
+    _lzBuilt = 1;
+  }
+  const cx=W*0.5, cy=H*0.5, R=Math.min(W,H)*0.44;
+  const prevOp=ctx.globalCompositeOperation; ctx.save();
+  try{
+    ctx.globalCompositeOperation='source-over'; ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(4,5,9,0.62)'; ctx.fillRect(0,0,W,H);   // dim the field -> the vector frame reads as "what the laser traces"
+    ctx.lineWidth=1.4; ctx.lineCap='round'; ctx.lineJoin='round';
+    let prevEnd=null;
+    for(const pl of _lzPolys){
+      let mr=0; for(const p of pl) mr+=Math.hypot(p[0],p[1]); mr/=pl.length;   // mean radius -> freq hue (220..360)
+      const hue=(220+Math.min(1,mr)*140)|0;
+      const s0x=cx+pl[0][0]*R, s0y=cy-pl[0][1]*R;
+      if(prevEnd){ ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.beginPath(); ctx.moveTo(prevEnd[0],prevEnd[1]); ctx.lineTo(s0x,s0y); ctx.stroke(); }  // faint blanking jump
+      ctx.strokeStyle='hsl('+hue+',95%,62%)'; ctx.beginPath();
+      for(let i=0;i<pl.length;i++){ const X=cx+pl[i][0]*R, Y=cy-pl[i][1]*R; if(i)ctx.lineTo(X,Y); else ctx.moveTo(X,Y); }
+      ctx.stroke();
+      prevEnd=[cx+pl[pl.length-1][0]*R, cy-pl[pl.length-1][1]*R];
+    }
+    if(cfg.cymTesseract && typeof _tssP!=='undefined'){     // tesseract edges are already vectors -> laser-native
+      ctx.strokeStyle='hsl(286,82%,66%)'; ctx.lineWidth=1.2;
+      for(let e=0;e<32;e++){ const i=_tssE[e*2], j=_tssE[e*2+1];
+        ctx.beginPath(); ctx.moveTo(_tssP[i*3],_tssP[i*3+1]); ctx.lineTo(_tssP[j*3],_tssP[j*3+1]); ctx.stroke(); }
+    }
+    const total=_lzPts + (cfg.cymTesseract?64:0), ok=total<=1000;
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(10,10,250,48);
+    ctx.fillStyle=ok?'#36e07f':'#ff5a5a'; ctx.font='600 13px ui-monospace,monospace';
+    ctx.fillText('◉ LASER FRAME (SIM)', 20, 31);
+    ctx.fillStyle='#cfe7f5';
+    ctx.fillText(total+' pts · '+_lzPolys.length+' strokes · '+(ok?'fits 1000-pt budget ✓':'over budget'), 20, 49);
   } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
 }
 
@@ -4717,6 +4808,7 @@ bindRange('setCymSpin', 'cymSpin');
 bindSw('swCymBloom', 'cymBloom', () => { _cymBloomEnv = 0; });
 bindSw('swCymPalette', 'cymPalette');
 bindSw('swCymPureSpectrum', 'cymPureSpectrum');
+bindSw('swCymLaser', 'cymLaser');
 bindRange('setCymDisc', 'cymDisc');
 { const el = $('setCymRest'); if(el){ el.value = String(cfg.cymRest||0); el.onchange = () => { cfg.cymRest = +el.value; saveCfg(); }; } }
 bindSw('swHaptic', 'haptics'); bindSw('swWake', 'wake', on => setWake(on));
@@ -4872,7 +4964,7 @@ function applyCfgToUI(){
   document.body.classList.toggle('reduce', cfg.reduce);
   [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic';
@@ -4939,7 +5031,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
