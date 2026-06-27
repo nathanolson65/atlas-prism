@@ -702,8 +702,17 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>✴ GENESIS field <span class="sub">(the song rendered AS a seeded neural-field equation — crisp iso-contour sacred geometry, generative)</span></label><div class="sw" id="swGenesis"></div></div>
       <div class="row"><label>◎ Cymatic field <span class="sub">(GENESIS sub-mode: the song as a real Bessel eigenmode standing-wave — nodal-line cymatic sacred geometry)</span></label><div class="sw" id="swCymatic"></div></div>
       <div class="row"><label>◎ — Frequency-true color <span class="sub">(paint the figure by its own spectrum — each region colored by the frequency it carries)</span></label><div class="sw" id="swCymFreqColor"></div></div>
-      <div class="row"><label>◎ — Brain connectogram <span class="sub">(brain-scan overlay: 12 chroma nodes + coherence edges = the nervous system; needs Key-color on)</span></label><div class="sw" id="swCymBrain"></div></div>
+      <div class="row"><label>◎ — Brain connectogram <span class="sub">(brain-scan overlay: 12 chroma nodes + coherence edges = the nervous system)</span></label><div class="sw" id="swCymBrain"></div></div>
       <div class="row"><label>◎ — Organism intensity <span class="sub">(fuses body contour density + brain edges; energy blooms both on the drop; 100 = full, lower = delicate)</span></label><input type="range" class="prng" id="setCymIntensity" min="0" max="100" value="100"></div>
+      <div class="row"><label>◎ — 4D Tesseract cage <span class="sub">(a real rotating hypercube — 16 verts/32 edges — frames the cymatic core: the first tesseract projector)</span></label><div class="sw" id="swCymTesseract"></div></div>
+      <div class="row"><label>◎ — Tesseract spin <span class="sub">(on = live 4D rotation driven by bass/treble; off = a frozen nested-cube pose)</span></label><div class="sw" id="swCymTessSpin"></div></div>
+      <div class="row"><label>◎ — Tesseract speed <span class="sub">(cage 4D rotation rate)</span></label><input type="range" class="prng" id="setCymTessSpeed" min="0" max="100" value="50"></div>
+      <div class="row"><label>◎ — Mode rotation <span class="sub">(per-mode differential churn — subtle alive mandala; 0 = static)</span></label><input type="range" class="prng" id="setCymSpin" min="0" max="100" value="0"></div>
+      <div class="row"><label>◎ — Beat blooms <span class="sub">(extra modes ignite on the drop, then decay)</span></label><div class="sw" id="swCymBloom"></div></div>
+      <div class="row"><label>◎ — Use palette <span class="sub">(route the organism's base hue through the active color palette; freq-color layers on top)</span></label><div class="sw" id="swCymPalette"></div></div>
+      <div class="row"><label>◎ — Pure-spectrum color <span class="sub">(lock the figure's color to its spectrum — bit-reproducible, no song-time drift)</span></label><div class="sw" id="swCymPureSpectrum"></div></div>
+      <div class="row"><label>◎ — Medallion size <span class="sub">(disc cut / negative space; lower = bigger figure, higher = tighter medallion)</span></label><input type="range" class="prng" id="setCymDisc" min="40" max="100" value="82"></div>
+      <div class="row"><label>◎ — Resting figure <span class="sub">(calm-silence form: ring / flower / concentric rings)</span></label><select class="sel" id="setCymRest"><option value="0">Ring</option><option value="1">Flower</option><option value="2">Concentric rings</option></select></div>
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -863,8 +872,18 @@ const cfg = Object.assign({
   genesis:false,   // GENESIS toggle: swaps INTO the song-as-equation neural-field mode; restores prev mode when off
   genMode:'cppn',  // GENESIS sub-mode: 'cppn' (neural-field, original) | 'cymatic' (Bessel eigenmode standing-wave)
   cymFreqColor:true,   // Cymatic Phase B: paint the figure by its own spectrum (per-mode baked hue, circular-mean dominant)
-  cymBrain:false,      // Cymatic Phase C: brain-scan connectogram overlay (12 chroma nodes + coherence edges) — opt-in, needs Key-color
+  cymBrain:false,      // Cymatic Phase C: brain-scan connectogram overlay (12 chroma nodes + coherence edges) — opt-in
   cymIntensity:100,    // Cymatic Phase D: 0..100 fuses body mode-count + brain edge-count/brightness; 100 = full medallion (=v53), lower = delicate
+  // v56 cymatic organism extensions — ALL inert by default (v55 byte-identical out of the box)
+  cymTesseract:false,  // v56-1: overlay a rotating 4D hypercube (16 verts/32 edges) framing the field
+  cymTessSpin:true,    // v56-1: true = dynamic 4D rotation (bass->4D morph, treble->3D spin); false = frozen pose
+  cymTessSpeed:50,     // v56-1: 0..100 cage 4D rotation rate (50 = baseline)
+  cymSpin:0,           // v56-2: 0..100 per-mode differential rotation (0 = v54 static mandala). Default OFF.
+  cymBloom:false,      // v56-3: beat/drop ignites extra modes briefly then decays. Default OFF (anti-mush).
+  cymPalette:false,    // v56-4: route the cymatic + tesseract base hue through cfg.palette (paletteHue)
+  cymPureSpectrum:false,// v56-6: drop the song-time hue drift -> color locked to the spectrum (bit-reproducible)
+  cymDisc:82,          // v56-8: medallion disc inner edge; 82 = v54. lower = bigger figure / less negative space
+  cymRest:0,           // v56-9: resting-figure style 0=ring 1=flower 2=concentric-rings
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
@@ -1864,6 +1883,9 @@ uniform float uSym;
 uniform float uNModes;
 uniform vec2  uModeHV[NMODES];   // Phase B: unit (cos,sin) of each mode's representative hue (baked in JS)
 uniform float uFreqColor;        // Phase B: 0 = Phase-A key hue; 1 = per-mode circular-mean dominant hue
+uniform float uSpin;             // v56-2: per-mode differential rotation phase (rad, song-time driven; 0 = static mandala)
+uniform float uHueDrift;         // v56-6: 1 = song-time hue drift on (v54); 0 = pure-spectrum lock
+uniform float uDisc;             // v56-8: medallion inner edge (smoothstep lo); 0.82 = v54
 
 const float Zk[NMODES] = float[NMODES](
   2.4048, 3.8317, 5.1356, 5.5201, 6.3802, 7.0156, 7.5883, 8.4172,
@@ -1914,7 +1936,7 @@ void main(){
     float a_k = uCoef[k];
     if(a_k <= 0.0005) continue;
     float jr   = Jlut(Nk[k], Zk[k] * r);
-    float term = a_k * jr * cos(Nk[k] * ang + Pk[k]);
+    float term = a_k * jr * cos(Nk[k] * (ang - uSpin*float(k)*0.013) + Pk[k]);
     F   += term;
     amp += a_k;
     if(fc){                       // Phase B: only pay the hue cost when freq-color is live
@@ -1944,11 +1966,11 @@ void main(){
   ink = max(ink, guide * 0.42);
 
   float discR = length(uvr * (uScale/2.2));
-  float disc  = 1.0 - smoothstep(0.82, 0.97, discR);   // tighter -> clean medallion + black negative space
+  float disc  = 1.0 - smoothstep(uDisc, uDisc+0.15, discR);   // v56-8: uDisc=0.82 -> v54 medallion
   ink *= disc;
 
   // Phase A hue family (gentle radial drift) — kept as the base; relative offset (pal() adds uHue/360).
-  float hueA = r*0.08 + (F*0.5+0.5)*0.04 - iTime*0.008;
+  float hueA = r*0.08 + (F*0.5+0.5)*0.04 - iTime*0.008*uHueDrift;
   // Phase B: hueB blends the ABSOLUTE spectral dominant hue (weight 0.85; subtract uHue/360 so it
   //          survives pal()'s internal uHue add as a true frequency hue) with 15% of the RELATIVE
   //          Phase-A drift for continuity. The two are in different reference frames ON PURPOSE.
@@ -1956,7 +1978,7 @@ void main(){
   float hueArg = mix(hueA, hueB, clamp(uFreqColor, 0.0, 1.0));
   vec3 col = pal(hueArg) * ink;
   col = floor(col*5.0 + 0.5) / 5.0;
-  col += pal(hueArg + 0.5) * pow(line, 3.0) * 0.40;
+  col += pal(hueArg + 0.06) * pow(line, 3.0) * 0.40;   // v56-5: near-analogous spark (was +0.5 = 180deg clash)
   col = col / (col + 0.85);
   col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
@@ -2040,6 +2062,8 @@ const _cymCoef = new Float32Array(CYM_NMODES);   // smoothed -> uploaded
 let _cymSeed = null;                             // dedicated seed (do NOT reuse _genWeightSeed)
 let _cymLastSongT = 0;
 let _cymCen = 0.4;                               // smoothed contrast-centroid -> the focus mode (spectral sync)
+let _cymBaseHue = 200;     // v56-4/1: palette-routed body base hue, shared with the tesseract
+let _cymBloomEnv = 0;      // v56-3: decaying "drop bloom" envelope (extra modes ignite on a beat+energy)
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
   const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
@@ -2070,15 +2094,41 @@ function buildCymCoef(){
     v = Math.tanh(v * 2.6);
     _cymRaw[k] = v < CYM_AFLOOR ? 0 : v;
   }
-  // 1b) resting fundamental ONLY in TRUE silence (so the live spectrum, not a fixed ring, drives the figure).
+  // 1b) resting figure ONLY in TRUE silence (so the live spectrum, not a fixed ring, drives the figure);
+  //     v56-9: cfg.cymRest picks the calm-silence shape (0=ring 1=flower 2=concentric rings).
   const _rms = (typeof audioRMS==='number') ? audioRMS : 0;
-  if(mx < 0.06 || _rms < 0.015){ const songT=(typeof _cymLastSongT==='number')?_cymLastSongT:0;
-    _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + 0.04*Math.sin(songT*0.25)); }
+  if(mx < 0.06 || _rms < 0.015){
+    const songT=(typeof _cymLastSongT==='number')?_cymLastSongT:0;
+    const _restBreath = 0.04*Math.sin(songT*0.25);
+    const _rest = (typeof cfg.cymRest==='number') ? cfg.cymRest : 0;
+    if(_rest === 1){            // flower: (2,1) lobes over the (0,1) ring   [CYM Nk index 2 = Nk=2.0]
+      _cymRaw[0] = Math.max(_cymRaw[0], 0.12 + _restBreath);
+      _cymRaw[2] = Math.max(_cymRaw[2], 0.16 + _restBreath);
+    } else if(_rest === 2){     // concentric high-order rings: mode index 14 (Nk=0 -> radial J0)
+      _cymRaw[0]  = Math.max(_cymRaw[0],  0.10 + _restBreath);
+      _cymRaw[14] = Math.max(_cymRaw[14], 0.16 + _restBreath);
+    } else {                    // 0 = ring (v54 default: mode (0,1))
+      _cymRaw[0] = Math.max(_cymRaw[0], 0.18 + _restBreath);
+    }
+  }
   // 2) keep only the top-K largest (energy>0.7 allows one extra), zero the rest.
   let kDraw = CYM_KDRAW;
   if(typeof LITE!=='undefined' && LITE) kDraw = liteLoad ? 2 : 3;   // LITE caps K at 3, drops to 2 under load
   const en = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0;
   if(en > 0.7) kDraw += 1;
+  // v56-3: beat-synced mode bloom — ignite extra modes on a beat boundary with high energy/kick, then
+  // decay. Bound is kDraw=Math.min(CYM_NMODES,kDraw) below + the shader's k>=uNModes break. Decay uses
+  // _dtf (frame-rate-smoothed, audio-reactive — NOT bit-reproducible); resets to 0 on _genSnap (seek/seed).
+  if(_genSnap){ _cymBloomEnv = 0; }   // reset bloom on seek/restart (the EMA branch below consumes _genSnap)
+  if(cfg.cymBloom){
+    const _bw = (typeof _beatWrapped!=='undefined' && _beatWrapped);
+    const _kk = (typeof kickEnv==='number') ? kickEnv : 0;
+    if(_bw && (en > 0.62 || _kk > 0.5)) _cymBloomEnv = Math.max(_cymBloomEnv, Math.min(1, en + _kk*0.5));
+    const _dt2 = (typeof _dtf==='number' && _dtf>0) ? _dtf : 1;
+    _cymBloomEnv *= Math.pow(0.90, _dt2);   // ~0.5s tail
+    if(_cymBloomEnv > 0.15) kDraw += (_cymBloomEnv > 0.5 ? 2 : 1);
+  }
+  kDraw = Math.min(CYM_NMODES, kDraw);
   const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);
   for(let r=kDraw;r<CYM_NMODES;r++) _cymRaw[idx[r]] = 0;
   // 3) soft-normalize kept set so total contour density is loudness-stable (~1.2 sum).
@@ -2119,7 +2169,9 @@ function drawGLCymatic(tt){
     nModes = Math.max(4, Math.min(nModes, bloom));   // only ever reduces/holds (clamped to the cap)
   }
   const scale = 2.2;
-  const temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
+  let temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
+  // v56-7: intensity sharpens lines (raises uTemp toward crisp). 100 = +0 (v54 baseline), lower = softer.
+  { const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100; temp = Math.min(1, temp + (_it-1)*0.25); }
   glDrawSingle(FRAG_CYMATIC, 'cymatic', songT, (P)=>{
     const g=GL;
     g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, _cymLUTtex); g.uniform1i(glU(P,'uBessel'), 1);
@@ -2133,19 +2185,33 @@ function drawGLCymatic(tt){
     const cen = (typeof centroid==='number' && centroid===centroid) ? centroid : 0.4;
     const flt = (typeof flatness==='number' && flatness===flatness) ? flatness : 0.3;
     const en  = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0.3;
-    const base = (typeof _keyHue==='number' ? _keyHue : (cen*300+200));
-    const hueDeg = (base + (cen-0.5)*40 + songT*0.6) % 360;
-    g.uniform1f(glU(P,'uHue'),  ((hueDeg%360)+360)%360);
+    let base = (typeof _keyHue==='number' ? _keyHue : (cen*300+200));
+    // v56-4: route the body base hue through the active palette band (Spectrum/passthrough = v54).
+    if(cfg.cymPalette && typeof paletteHue==='function'){ const _pi=_palIdx, _ho=_palHueOff; _palIdx=cfg.palette; _palHueOff=0; base=paletteHue(base); _palIdx=_pi; _palHueOff=_ho; }
+    // v56-6: pure-spectrum locks hue to the spectrum (drop the song-time drift term).
+    const _drift = cfg.cymPureSpectrum ? 0 : songT*0.6;
+    const hueDeg = (base + (cen-0.5)*40 + _drift) % 360;
+    const _hueN  = ((hueDeg%360)+360)%360;
+    g.uniform1f(glU(P,'uHue'),  _hueN);
+    _cymBaseHue = _hueN;   // v56-1: stash for the tesseract (same hue family)
     g.uniform1f(glU(P,'uSat'),  Math.max(50, Math.min(90, 90 - flt*40)));
     g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, 40 + en*22)));
     // Phase B: per-mode hue vectors + toggle (cheap; reuses the modal loop). LITE-under-load drops to
     // Phase-A single hue (zero per-pixel atan + zero accumulation via the uFreqColor>0.5 branch).
     g.uniform2fv(glU(P,'uModeHV'), _cymModeHV);
     g.uniform1f (glU(P,'uFreqColor'), (cfg.cymFreqColor && !(LITE && typeof dQ==='number' && dQ<0.6)) ? 1.0 : 0.0);
+    // v56-2: per-mode gentle rotation. uSpin = song-time * rate; deterministic (genSongTime); 0 when cymSpin=0.
+    g.uniform1f (glU(P,'uSpin'), songT * ((typeof cfg.cymSpin==='number'?cfg.cymSpin:0)/100) * 0.6);
+    // v56-6: pure-spectrum lock kills the shader's iTime hue drift.
+    g.uniform1f (glU(P,'uHueDrift'), cfg.cymPureSpectrum ? 0.0 : 1.0);
+    // v56-7/8: disc inner edge from cfg.cymDisc (40..100 -> ~0.62..1.05), nudged wider by intensity.
+    { const _d=(typeof cfg.cymDisc==='number'?cfg.cymDisc:82)/100; const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100;
+      g.uniform1f(glU(P,'uDisc'), Math.max(0.4, Math.min(1.05, (0.42 + _d*0.488) + (_it-1)*0.06))); }
   });
   // Phase C: draw the connectogram on the SAME module-level 2D ctx glDrawSingle composited into.
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
   drawCymBrain(ctx);
+  drawCymTesseract(ctx, songT);   // v56-1: 4D hypercube cage frames the core; songT = deterministic clock
 }
 
 /* ============ Phase C — BRAIN CONNECTOGRAM (cymatic "nervous system") ============
@@ -2173,13 +2239,14 @@ function _pcHue(pc){ return 220 + (((pc*7)%12)/12)*140; }    // 220..~348, indig
 
 function drawCymBrain(ctx){
   if(!cfg.cymBrain) return;
-  if(!cfg.keyColor) return;                    // real dependency: _chromaN only valid w/ Key-color on
+  // v56-10: _chromaN is populated whenever cymBrain is on (computeChromaKey's expanded gate); the
+  // _csum<1e-4 guard below bails if chroma isn't ready yet, so no Key-color dependency remains.
   const raw = (typeof _chromaN!=='undefined' && _chromaN) ? _chromaN : null;
   if(!raw) return;
   let _csum=0; for(let i=0;i<12;i++) _csum+=raw[i]||0;
   if(_csum < 1e-4) return;                      // silent in true silence (no frozen overlay)
-  // normalize to sum 1 — computeChromaKey leaves RAW energy in _chromaN between its 0.16s renorms,
-  // so reading it directly would flicker/saturate node sizes. This makes nodes stable + comparable.
+  // normalize to sum 1 — defensive isolation. As of v56-11, computeChromaKey normalizes _chromaN every
+  // frame, so this is now a harmless identity re-divide of an already-sum-1 vector; kept for safety.
   const ch = _cgChN; const _cinv=1/_csum; for(let i=0;i<12;i++) ch[i]=(raw[i]||0)*_cinv;
 
   // ---- seek/seed snap: reset EMA in lockstep with the field (genSnapLatent sets _cgSnap) ----
@@ -2284,6 +2351,102 @@ function drawCymBrain(ctx){
         g.addColorStop(1,'hsla('+hue+',62%,60%,0)');
         ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,rad*2.6,0,6.2831853); ctx.fill(); }
       ctx.fillStyle='hsla('+hue+',62%,'+(lite?'54%':'60%')+','+Math.min(0.85,al+0.1).toFixed(3)+')';
+      ctx.beginPath(); ctx.arc(x,y,rad,0,6.2831853); ctx.fill();
+    }
+  } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
+}
+
+/* ============ v56-1 — TESSERACT (4D hypercube cage framing the cymatic core) ============
+   16 verts = (+/-1)^4. 32 edges = vertex pairs differing in exactly ONE coordinate. Six 4D rotation
+   planes (xy,xz,xw,yz,yw,zw): bass drives the *w planes (the 4D-into-3D morph), treble the in-3D spin.
+   DETERMINISM: the angle is a PURE FUNCTION of songT (seek-snapped) — _tssAng[p] = rate * (songT - base).
+   The EMA'd rate is audio-reactive (speed varies with the band energy) but every replay from the same
+   seek point reproduces the same pose because songT is the only clock. Two perspective divides
+   (4D->3D, 3D->2D). source-over, bounded alpha, refract-safe. Sparse (32 edges) -> legible. */
+const _tssV = new Float32Array(16*4);      // 16 verts x (x,y,z,w) in {-1,+1}
+const _tssE = new Int16Array(32*2);        // 32 edges (i,j) by vertex index
+(function bakeTesseract(){
+  let vi=0; for(let m=0;m<16;m++){          // verts: bit b -> +/-1 on coord b
+    _tssV[vi++]=(m&1)?1:-1; _tssV[vi++]=(m&2)?1:-1; _tssV[vi++]=(m&4)?1:-1; _tssV[vi++]=(m&8)?1:-1; }
+  let ei=0; for(let a=0;a<16;a++) for(let b=a+1;b<16;b++){   // edge iff Hamming distance == 1
+    const d=a^b; if(d && (d&(d-1))===0){ _tssE[ei*2]=a; _tssE[ei*2+1]=b; ei++; } }   // exactly 32
+})();
+const _tssRot   = new Float32Array(6);      // EMA'd plane rates (xy,xz,xw,yz,yw,zw)
+const _tssAng   = new Float32Array(6);      // accumulated angles = rate*(songT-base) (deterministic)
+let   _tssSnapSeen = null;                   // re-arm key (mirrors _cgSeedSeen): reset on seed/seek change
+let   _tssBaseT = 0;                          // songT at last re-arm; the angle integral is relative to it
+const _tssP = new Float32Array(16*3);        // projected x, y, depth-cue per vert
+// v56-1: hand-picked frozen 4D pose for STATIC mode — the classic nested-cube tesseract silhouette.
+const _TSS_STATIC = new Float32Array([0.62, 0.30, 0.78, 0.0, 0.0, 0.0]);  // xy,xz,xw,yz,yw,zw
+function drawCymTesseract(ctx, songT){
+  if(!cfg.cymTesseract) return;
+  // seek/seed reset: re-arm rates + angle base in lockstep with the field (keyed on the cymatic seed).
+  if(_tssSnapSeen !== _cymSeed){ _tssRot.fill(0); _tssAng.fill(0); _tssBaseT = (typeof songT==='number')?songT:0; _tssSnapSeen = _cymSeed; }
+  const lite  = (typeof LITE!=='undefined' && LITE);
+  const spin  = cfg.cymTessSpin !== false;
+  const speed = (typeof cfg.cymTessSpeed==='number'?cfg.cymTessSpeed:50)/50;   // 50 -> 1.0 baseline
+  const sT    = (typeof songT==='number') ? songT : 0;
+  const lo=(typeof Q!=='undefined'&&Q)?Q.low:0, mi=(typeof Q!=='undefined'&&Q)?Q.mid:0, hi=(typeof Q!=='undefined'&&Q)?Q.high:0;
+  const tgt=[ 0.05+hi*0.30, 0.04+hi*0.22, 0.07+lo*0.40, 0.045+mi*0.26, 0.06+lo*0.34, 0.05+lo*0.30 ];  // xy,xz,xw,yz,yw,zw
+  const dtf = (typeof _dtf==='number'&&_dtf>0)?_dtf:1;
+  const aE  = 1 - Math.pow(0.92, dtf);
+  // DETERMINISTIC angle: rate (EMA'd) * elapsed song-time since the last re-arm. No wall-clock integral.
+  for(let p=0;p<6;p++){ _tssRot[p] += (tgt[p]-_tssRot[p])*aE;
+    if(spin) _tssAng[p] = _tssRot[p]*speed*(sT-_tssBaseT); }
+  const A = spin ? _tssAng : _TSS_STATIC;
+  // project all 16 verts: 6-plane 4D rotation -> 4D->3D persp -> 3D->2D persp -> fit just inside the rim.
+  const cx=W*0.5, cy=H*0.5, fit=Math.min(W,H)*0.50, distW=2.6, distZ=3.6;   // v56-1b: frame the medallion (was 0.39)
+  const c0=Math.cos(A[0]),s0=Math.sin(A[0]), c1=Math.cos(A[1]),s1=Math.sin(A[1]), c2=Math.cos(A[2]),s2=Math.sin(A[2]),
+        c3=Math.cos(A[3]),s3=Math.sin(A[3]), c4=Math.cos(A[4]),s4=Math.sin(A[4]), c5=Math.cos(A[5]),s5=Math.sin(A[5]);
+  for(let v=0; v<16; v++){
+    let x=_tssV[v*4], y=_tssV[v*4+1], z=_tssV[v*4+2], w=_tssV[v*4+3], t;
+    t=x*c0-y*s0; y=x*s0+y*c0; x=t;   // xy
+    t=x*c1-z*s1; z=x*s1+z*c1; x=t;   // xz
+    t=x*c2-w*s2; w=x*s2+w*c2; x=t;   // xw
+    t=y*c3-z*s3; z=y*s3+z*c3; y=t;   // yz
+    t=y*c4-w*s4; w=y*s4+w*c4; y=t;   // yw
+    t=z*c5-w*s5; w=z*s5+w*c5; z=t;   // zw
+    const k4=1/Math.max(0.35, distW - w);       // 4D->3D perspective (w nearer -> bigger)
+    let X=x*k4, Y=y*k4, Z=z*k4;
+    const k3=1/Math.max(0.35, distZ - Z);       // 3D->2D perspective
+    _tssP[v*3]   = cx + X*k3*fit;
+    _tssP[v*3+1] = cy + Y*k3*fit;
+    _tssP[v*3+2] = k4;                            // depth cue: bigger k4 = nearer in 4D
+  }
+  let dmin=1e9,dmax=-1e9; for(let v=0;v<16;v++){ const d=_tssP[v*3+2]; if(d<dmin)dmin=d; if(d>dmax)dmax=d; }
+  const dspan=(dmax-dmin)||1;
+  const bp=(typeof _beatPh==='number')?_beatPh:0, kick=(typeof kickEnv==='number')?kickEnv:0;
+  const pulse = 0.85 + 0.15*(0.5+0.5*Math.cos(bp*6.2831853)) + kick*0.20;
+  const baseHue = (typeof _cymBaseHue==='number') ? _cymBaseHue : 200;
+  const cageBright = (typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100;
+  // auto-dim when the brain is co-active so shells don't fight; extra dim under refract (3x 'lighter' recombine).
+  const tessDim = (cfg.cymBrain ? 0.75 : 1.0) * (cfg.refract ? 0.7 : 1.0);
+  const prevOp = ctx.globalCompositeOperation;
+  ctx.save();
+  try{
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    for(let e=0; e<32; e++){
+      const i=_tssE[e*2], j=_tssE[e*2+1];
+      const x0=_tssP[i*3], y0=_tssP[i*3+1], x1=_tssP[j*3], y1=_tssP[j*3+1];
+      const d=i^j; const axis = d===1?0 : d===2?1 : d===4?2 : 3;   // 0=x,1=y,2=z,3=w (the 4D connectors)
+      const dn=Math.max(0, Math.min(1, (((_tssP[i*3+2]+_tssP[j*3+2])*0.5)-dmin)/dspan));   // 0 far .. 1 near
+      if(lite && axis!==3 && dn<0.20) continue;                    // LITE: thin only the back filigree
+      let hue = baseHue + axis*16 + (axis===3?28:0);
+      if(cfg.cymPalette && typeof paletteHue==='function'){ const _pi=_palIdx,_ho=_palHueOff; _palIdx=cfg.palette; _palHueOff=0; hue=paletteHue(hue); _palIdx=_pi; _palHueOff=_ho; }
+      hue=((hue%360)+360)%360;
+      const al=Math.min(0.52, (0.22 + dn*0.42) * pulse * cageBright * tessDim);   // v56-1c bold cage; cap 0.52 (source-over; tessDim x0.7 under refract)
+      ctx.strokeStyle='hsla('+(hue|0)+','+(axis===3?72:58)+'%,'+(60+dn*12|0)+'%,'+al.toFixed(3)+')';
+      ctx.lineWidth=(1.3 + dn*2.6) * (axis===3?1.3:1) * (lite?0.8:1);
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    }
+    if(!lite) for(let v=0; v<16; v++){     // vertex dots (desktop): inner(w=-1) vs outer(w=+1) tint, beat-pulse
+      const x=_tssP[v*3], y=_tssP[v*3+1], dn=Math.max(0,Math.min(1,(_tssP[v*3+2]-dmin)/dspan));
+      const rad=(1.7 + dn*3.0)*pulse, al=Math.min(0.58, (0.22+dn*0.36))*cageBright*tessDim;   // v56-1c bolder verts (source-over)
+      let hd = baseHue + (_tssV[v*4+3] < 0 ? 0 : 28);   // inner/outer cube tint within the family
+      if(cfg.cymPalette && typeof paletteHue==='function'){ const _pi=_palIdx,_ho=_palHueOff; _palIdx=cfg.palette; _palHueOff=0; hd=paletteHue(hd); _palIdx=_pi; _palHueOff=_ho; }
+      hd=((hd%360)+360)%360;
+      ctx.fillStyle='hsla('+(hd|0)+',60%,'+(60+dn*8|0)+'%,'+al.toFixed(3)+')';
       ctx.beginPath(); ctx.arc(x,y,rad,0,6.2831853); ctx.fill();
     }
   } finally { ctx.restore(); ctx.globalCompositeOperation=prevOp; }
@@ -2972,12 +3135,19 @@ function _kkBuildLUT(){
   for(let i=0;i<nbin;i++){ const f=i*nyq/nbin; if(f<55||f>5000){ _kkBinPC[i]=-1; continue; } let pc=Math.round(12*Math.log2(f/16.3516))%12; if(pc<0)pc+=12; _kkBinPC[i]=pc; }
 }
 function computeChromaKey(){
-  if(!(cfg.keyColor && audioReactive && playing && analyser)){ _keyConfS*=0.95; return; }
+  // v56-10: chroma is needed by the connectogram + tesseract too, not just Key-color body recolor.
+  const _wantChroma = cfg.keyColor || cfg.cymBrain || cfg.cymTesseract;
+  if(!(_wantChroma && audioReactive && playing && analyser)){ _keyConfS*=0.95; return; }
   if(!_kkBinPC || _kkBinPC.length!==freqData.length) _kkBuildLUT();
   const acc=_chromaN; acc.fill(0); const nbin=freqData.length;
   for(let i=1;i<nbin;i++){ const pc=_kkBinPC[i]; if(pc<0)continue; const v=freqData[i]/255; if(v<0.10)continue; acc[pc]+=v*v; }
   const lvl=Q.energy*0.7+audioRMS*1.4, k=lvl>0.10?0.04:0.012;
   for(let p=0;p<12;p++) _chroma[p]+=(acc[p]-_chroma[p])*k;
+  // v56-11: normalize the EMA'd chroma into _chromaN EVERY frame (not just at the 0.16s key window),
+  // so all consumers (buildLatent quartiles, connectogram, tesseract) read a stable sum-1 vector.
+  // The 0.16s block below re-does the identical division -> the key estimator math is unchanged.
+  { let _gs=0; for(let p=0;p<12;p++) _gs+=_chroma[p];
+    if(_gs>1e-6){ const _gi=1/_gs; for(let p=0;p<12;p++) _chromaN[p]=_chroma[p]*_gi; } }
   if(t-_kkLastT>0.16){ _kkLastT=t; let sum=0; for(let p=0;p<12;p++) sum+=_chroma[p];
     if(sum>1e-4){ for(let p=0;p<12;p++) _chromaN[p]=_chroma[p]/sum; let m=0; for(let p=0;p<12;p++) m+=_chromaN[p]; m/=12;
       let best=-1e9, second=-1e9, bt=0, bmin=0;
@@ -4536,9 +4706,19 @@ bindSw('swGenesis', 'genesis', on => {
 bindSw('swCymFreqColor', 'cymFreqColor');
 bindSw('swCymBrain', 'cymBrain', (on) => {
   _cgInit = false; _cgSnap = true;                              // re-arm coherence EMA on (re)enable
-  if(on && !cfg.keyColor){ cfg.keyColor = true; const k = $('swKeyColor'); if(k) k.classList.add('on'); saveCfg(); }
+  // v56-10: chroma now computes for the brain without forcing Key-color (body recolor stays opt-in).
 });
 bindRange('setCymIntensity', 'cymIntensity');
+// v56 cymatic-organism controls
+bindSw('swCymTesseract', 'cymTesseract', () => { _tssSnapSeen = null; });   // re-arm rotation on enable
+bindSw('swCymTessSpin', 'cymTessSpin');
+bindRange('setCymTessSpeed', 'cymTessSpeed');
+bindRange('setCymSpin', 'cymSpin');
+bindSw('swCymBloom', 'cymBloom', () => { _cymBloomEnv = 0; });
+bindSw('swCymPalette', 'cymPalette');
+bindSw('swCymPureSpectrum', 'cymPureSpectrum');
+bindRange('setCymDisc', 'cymDisc');
+{ const el = $('setCymRest'); if(el){ el.value = String(cfg.cymRest||0); el.onchange = () => { cfg.cymRest = +el.value; saveCfg(); }; } }
 bindSw('swHaptic', 'haptics'); bindSw('swWake', 'wake', on => setWake(on));
 bindSw('swAutohide', 'autohide', () => lastActivity = performance.now());
 bindSw('swBig', 'big', on => document.body.classList.toggle('big', on));
@@ -4690,9 +4870,9 @@ window.addEventListener('offline', () => { updateOnline(); toast('Offline — se
 function applyCfgToUI(){
   document.body.classList.toggle('big', cfg.big);
   document.body.classList.toggle('reduce', cfg.reduce);
-  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity']]
+  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic';
@@ -4703,6 +4883,7 @@ function applyCfgToUI(){
   if($('setBlendMode')) $('setBlendMode').value = cfg.blendMode;
   if($('setBlendPalette')) $('setBlendPalette').value = cfg.blendPalette;
   if($('setBlendComp')) $('setBlendComp').value = cfg.blendComp;
+  if($('setCymRest')) $('setCymRest').value = String(cfg.cymRest||0);
   if(typeof updateCustomRows === 'function') updateCustomRows();
   if(typeof updatePalPreview === 'function') updatePalPreview();
   if(typeof updateBlendUI === 'function') updateBlendUI();
@@ -4758,7 +4939,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
