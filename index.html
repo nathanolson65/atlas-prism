@@ -2152,9 +2152,9 @@ void main(){
     float V = smoothstep(0.04, 0.14, ink);                 // FULL brightness: any cell -> V=1.0 (dark boundaries+negative space stay black via the band gaps); NOT music-scaled
     vec3 fullSat = cymHsv2rgb(vec3(hueArg, 1.0, V));        // pure hue, S=1.0 AND V=1.0 in cells -> max pop, laser-ready
     col = mix(col, fullSat, smoothstep(0.0, 0.25, uCell));  // any water-cell amount -> fully-saturated pure hues
-    float bloomT = smoothstep(0.6, 0.95, V);                // #19 threshold bloom on the brightest cells ONLY
-    col += fullSat * bloomT * uCellBloom * 0.5;
+    col += fullSat * smoothstep(0.80, 0.99, V) * uCellBloom * 0.28;   // #19 gentle bloom (full-V cells already pop; keep small + high threshold)
     col += vec3(0.02,0.012,0.05) * uBgTint;                 // #7 deep indigo ground so jewel colors pop
+    vec3 hsvF = cymRgb2hsv(col); hsvF.y = 1.0; col = cymHsv2rgb(hsvF);   // FINAL re-peg S=1.0 -> a fully-saturated color can NEVER be white/pale -> kills the center white-out (laser-safe)
   }
   col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
@@ -5343,11 +5343,11 @@ let slots = LS.get('slots', [null,null,null,null,null,null,null,null]);
 let slotNames = LS.get('slotNames', [null,null,null,null,null,null,null,null]);
 function saveToSlot(i){
   const def = slotNames[i] || ('P' + (i + 1));
-  let name = prompt('Name this preset', def);
-  if(name === null) return;                                   // cancelled
-  name = (name.trim() || def).slice(0, 18);
+  let name = def;
+  try{ const r = prompt('Name this preset', def); if(r !== null) name = r; }catch(_){}   // prompt is blocked in installed PWAs / some mobile browsers -> keep the default name and STILL save (never silently fail)
+  name = (String(name).trim() || def).slice(0, 18);
   slots[i] = snapshot(); slotNames[i] = name;
-  LS.set('slots', slots); LS.set('slotNames', slotNames); renderSlots(); toast('Saved “' + name + '”', 'ok');
+  LS.set('slots', slots); LS.set('slotNames', slotNames); renderSlots(); toast('Saved “' + name + '” ✓', 'ok');
 }
 function renderSlots(){
   const c = $('slots'); c.innerHTML = '';
@@ -5358,7 +5358,7 @@ function renderSlots(){
     b.oncontextmenu = e => { e.preventDefault(); slots[i] = null; slotNames[i] = null; LS.set('slots', slots); LS.set('slotNames', slotNames); renderSlots(); toast('Cleared P' + (i + 1)); };
     c.appendChild(b); });
 }
-$('presetSave').addEventListener('click', () => { const i = slots.findIndex(s => !s); if(i < 0){ toast('All slots full — long-press a slot to clear'); return; } saveToSlot(i); });
+$('presetSave').addEventListener('click', () => { let i = slots.findIndex(s => !s); if(i < 0){ i = 0; toast('All slots full — overwriting P1'); } saveToSlot(i); });
 $('presetShare').addEventListener('click', () => { try{ const url = location.origin + location.pathname + '#p=' + btoa(JSON.stringify(snapshot())); (navigator.clipboard && navigator.clipboard.writeText(url)); toast('Preset link copied', 'ok'); }catch(_){ toast('Could not copy', 'err'); } });
 $('presetExport').addEventListener('click', () => { const data = { cfg, playlist, favs, slots, modeSettings }; dl('data:application/json,' + encodeURIComponent(JSON.stringify(data, null, 2)), 'atlas-prism-presets.json'); });
 $('presetImport').addEventListener('click', () => { const f = document.createElement('input'); f.type = 'file'; f.accept = 'application/json'; f.onchange = () => { const file = f.files[0]; if(!file) return; file.text().then(txt => { try{ const d = JSON.parse(txt); if(d.cfg) Object.assign(cfg, d.cfg); if(d.playlist) playlist = d.playlist; if(d.favs) favs = d.favs; if(d.slots) slots = d.slots; if(d.modeSettings) modeSettings = d.modeSettings; saveCfg(); LS.set('playlist', playlist); LS.set('favs', favs); LS.set('slots', slots); LS.set('modeSettings', modeSettings); applyCfgToUI(); renderPlaylists(); renderSlots(); toast('Presets imported', 'ok'); }catch(_){ toast('Bad file', 'err'); } }); }; f.click(); });
@@ -5498,7 +5498,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
