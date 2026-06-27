@@ -2027,6 +2027,9 @@ float Jlut(float n, float x){
 
 // #5 vivid CymaScope jewel-tone palette (cosine gradient: cyan->teal->violet->magenta->amber)
 vec3 cymaPal(float t){ return clamp(vec3(0.5)+vec3(0.5)*cos(6.2832*(t+vec3(0.0,0.33,0.67)))*vec3(0.9,0.85,1.0)+vec3(0.05,0.10,0.20), 0.0, 1.0); }
+// HSV<->RGB so water-cell colors can be FORCED to full saturation (laser-ready pure hues; keeps hue+brightness)
+vec3 cymRgb2hsv(vec3 c){ vec4 K=vec4(0.0,-0.33333333,0.66666667,-1.0); vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g)); vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r)); float d=q.x-min(q.w,q.y); return vec3(abs(q.z+(q.w-q.y)/(6.0*d+1e-10)), d/(q.x+1e-10), q.x); }
+vec3 cymHsv2rgb(vec3 c){ vec3 p=abs(fract(c.xxx+vec3(0.0,0.66666667,0.33333333))*6.0-3.0); return c.z*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),c.y); }
 
 void main(){
   vec2 uvr = (gl_FragCoord.xy * 2.0 - iResolution) / min(iResolution.x, iResolution.y);
@@ -2144,12 +2147,12 @@ void main(){
   else { col = floor(col*5.0 + 0.5) / 5.0; }
   col += pal(hueArg + 0.06) * pow(line, 3.0) * 0.40;   // v56-5: near-analogous spark (was +0.5 = 180deg clash)
   col = col / (col + 0.85);
-  if(uCell > 0.001){                                       // v60 🌊: filled cells read DIM after the tonemap -> restore VIVID saturation + a brightness lift
-    float lum = dot(col, vec3(0.299,0.587,0.114));
-    vec3 satd = clamp(mix(vec3(lum), col, 2.8), 0.0, 1.0);  // ~2.8x saturation = vivid CymaScope jewel color
-    col = mix(col, satd * 1.30, uCell*0.92);                // brightness lift (clamp below caps any white-out)
-    float bloomT = smoothstep(0.6, 0.9, dot(col, vec3(0.299,0.587,0.114)));   // #19 threshold bloom on the brightest cells ONLY
-    col += col * bloomT * uCellBloom * 0.5;
+  if(uCell > 0.001){                                       // v60 🌊: FULLY-SATURATED pure hues (laser-ready; NO music-scaled saturation)
+    float V = clamp(ink * 1.5, 0.0, 1.0);                   // brightness straight from cell strength (bypass the Reinhard crush) -> cells POP
+    vec3 fullSat = cymHsv2rgb(vec3(hueArg, 1.0, V));        // pure hue, S=1.0 always, bright
+    col = mix(col, fullSat, smoothstep(0.0, 0.25, uCell));  // any water-cell amount -> fully-saturated pure hues
+    float bloomT = smoothstep(0.6, 0.95, V);                // #19 threshold bloom on the brightest cells ONLY
+    col += fullSat * bloomT * uCellBloom * 0.5;
     col += vec3(0.02,0.012,0.05) * uBgTint;                 // #7 deep indigo ground so jewel colors pop
   }
   col = clamp(col, 0.0, 1.0);
@@ -5494,7 +5497,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
