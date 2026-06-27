@@ -2148,8 +2148,8 @@ void main(){
   col += pal(hueArg + 0.06) * pow(line, 3.0) * 0.40;   // v56-5: near-analogous spark (was +0.5 = 180deg clash)
   col = col / (col + 0.85);
   if(uCell > 0.001){                                       // v60 🌊: FULLY-SATURATED pure hues (laser-ready; NO music-scaled saturation)
-    float V = clamp(ink * 1.5, 0.0, 1.0);                   // brightness straight from cell strength (bypass the Reinhard crush) -> cells POP
-    vec3 fullSat = cymHsv2rgb(vec3(hueArg, 1.0, V));        // pure hue, S=1.0 always, bright
+    float V = smoothstep(0.04, 0.14, ink);                 // FULL brightness: any cell -> V=1.0 (dark boundaries+negative space stay black via the band gaps); NOT music-scaled
+    vec3 fullSat = cymHsv2rgb(vec3(hueArg, 1.0, V));        // pure hue, S=1.0 AND V=1.0 in cells -> max pop, laser-ready
     col = mix(col, fullSat, smoothstep(0.0, 0.25, uCell));  // any water-cell amount -> fully-saturated pure hues
     float bloomT = smoothstep(0.6, 0.95, V);                // #19 threshold bloom on the brightest cells ONLY
     col += fullSat * bloomT * uCellBloom * 0.5;
@@ -5497,7 +5497,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)

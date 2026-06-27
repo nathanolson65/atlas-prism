@@ -1,5 +1,5 @@
 /* ATLAS Prism — cache-first service worker */
-const CACHE = 'atlas-prism-v61';
+const CACHE = 'atlas-prism-v62';
 /* v47 RELIABLE UPDATES: install fetches assets with cache:'reload' (never caches an HTTP-stale index.html);
    the page registers with updateViaCache:'none', calls reg.update() on focus, and auto-reloads on
    controllerchange; plus a Settings "🔄 Force update now" button (unregister SW + clear caches + reload) as the
