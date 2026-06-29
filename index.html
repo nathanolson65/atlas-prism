@@ -721,6 +721,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◈ — Lead / melody sync <span class="sub">(v68: bias the figure toward the mid/upper-mid LEAD register so a melodic lead — guitar/horn/synth/vocal — reshapes the mandala, not just the drums+bass; 0 = off)</span></label><input type="range" class="prng" id="setCymLead" min="0" max="100" value="0"></div>
       <div class="row"><label>🧬 DNA Song Decoder <span class="sub">(v69 — the LEAP: pre-scan the WHOLE song once → drive the cymatics from its DNA. Shape follows the spectrum, density + brightness follow the song's structure, drops PUNCH, build-ups anticipate. ONE toggle — turn your other sync sliders down and just flip this on; your presets stay untouched. Needs a streamed/file song, not the YouTube-embed or mic.)</span></label><div class="sw" id="swCymSongDNA"></div></div>
       <div class="row"><label>🧬 — Complexity range <span class="sub">(v71 — how hard musical INTENSITY drives pattern complexity: delicate few-ring verse → dense crisp BassForge-grade mandala at the drop. Needs DNA on. 0 = v70 gentle; 70 = dramatic verse↔drop contrast; 100 = brutal.)</span></label><input type="range" class="prng" id="setCymComplexity" min="0" max="100" value="70"></div>
+      <div class="row"><label>🌊 — Cell transparency <span class="sub">(v72 — width of the DARK nodal gaps between the colored antinode cells, so the complex cell PATTERN reads clearly instead of a solid rainbow fill. Colors unchanged. 0 = thin gaps (solid) · 40 = clear structure · 100 = max see-through.)</span></label><input type="range" class="prng" id="setCymCellGap" min="0" max="100" value="40"></div>
       <div class="row"><label>◆ — Mode hold <span class="sub">(de-pop: locks the dominant ring so it stops flickering between near-tied modes)</span></label><div class="sw" id="swCymHyst"></div></div>
       <div class="row"><label>◆ — Smooth fade <span class="sub">(de-pop: modes fade in/out ~300ms instead of popping to dark)</span></label><div class="sw" id="swCymSmooth"></div></div>
       <div class="row"><label>◆ — Soft gate <span class="sub">(de-pop: boundary modes feather in/out instead of a hard cutoff — keeps clean negative space)</span></label><div class="sw" id="swCymSoftGate"></div></div>
@@ -912,6 +913,7 @@ const cfg = Object.assign({
   cymBrain:false,      // Cymatic Phase C: brain-scan connectogram overlay (12 chroma nodes + coherence edges) — opt-in
   cymIntensity:100,    // Cymatic Phase D: 0..100 fuses body mode-count + brain edge-count/brightness; 100 = full medallion (=v53), lower = delicate
   cymComplexity:70,    // v71 WIDE-DYNAMIC-RANGE: how aggressively musical intensity (per-song-normalized + expanded) drives pattern COMPLEXITY (mode count/focus order/ring fineness/symmetry/density). Engages only with the DNA decoder ON. 0 = v70 behavior; 70 = delicate verse -> dense crisp BassForge drop.
+  cymCellGap:40,       // v72 CELL TRANSPARENCY: width of the DARK nodal gaps between antinode cells. 0 = thin gaps (solid rainbow fill, pre-v72) .. 100 = wide gaps (max see-through structure). Higher = the complex cell pattern reads clearly; colors unchanged.
   // v56 cymatic organism extensions — ALL inert by default (v55 byte-identical out of the box)
   cymTesseract:false,  // v56-1: overlay a rotating 4D hypercube (16 verts/32 edges) framing the field
   cymTessSpin:true,    // v56-1: true = dynamic 4D rotation (bass->4D morph, treble->3D spin); false = frozen pose
@@ -1973,6 +1975,7 @@ uniform float uSymBreath;        // v59 §6: kfold mirror-axis rotation (rad). 0
 uniform float uSymWobble;        // v59 §6: fractional kfold-order delta. 0 = v58
 uniform float uCell;             // v60 🌊: antinode-cell water-cymatics fill mix (0 = nodal-LINE view; 1 = bright filled CELLS, dark F=0 boundaries)
 uniform float uKMul;             // v71: radial ring-fineness multiplier (1 = base; >1 = finer concentric bands at high musical intensity)
+uniform float uCellGap;          // v72: cell-pattern TRANSPARENCY — the bright antinode-band half-width (lower = WIDER dark nodal gaps = the complex cell structure reads clearly; colors unchanged)
 // v60 FULL-SONG-SYNC + CymaScope uniforms (all 0 / neutral by default -> cymCell=0 byte-identical)
 uniform float uFlow;     // b: deterministic flux flow phase
 uniform float uCrisp;    // c: perc -> edge crispness
@@ -2126,13 +2129,13 @@ void main(){
     float fb    = fract(phase);
     float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.06;            // #13 static + (c) perc -> sharper dark boundary
     float fwb   = fwidth(phase) + 1e-4;                           // pixel footprint of the banding -> ANTI-ALIAS: SHARP lines, no grain (smooths to flat where sub-pixel instead of aliasing)
-    float band  = clamp(((0.40 + hard) - abs(fb - 0.5))/fwb + 0.5, 0.0, 1.0);
+    float band  = clamp(((uCellGap + hard) - abs(fb - 0.5))/fwb + 0.5, 0.0, 1.0);   // v72: uCellGap sets the bright-band width -> the rest is the DARK transparency gap (cell structure)
     float vign  = smoothstep(uDisc+0.04, uDisc-0.30, discR);
     float core  = smoothstep(0.025, 0.10, aFr);   // light cells at lower field too -> vivid across all loudness (not just drops)
     float cell  = band * core * vign;
     cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
     cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
-    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp((0.42-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp, no grain)
+    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp(((uCellGap+0.02)-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp; gap follows uCellGap)
     float men  = max(0.0, (1.0-smoothstep(0.30,0.40,abs(fb-0.5))) - (1.0-smoothstep(0.40,0.48,abs(fb-0.5)))) * core * vign;   // #14 meniscus rim
     float halo = (1.0 - smoothstep(0.18, 0.34, abs(fb-0.5))) * core * vign;                                                   // (d) harm glow skirt
     float ping = (1.0 - smoothstep(0.0, 0.10, abs(r - uPingR))) * uPingA * 0.5;                                               // (e) which ring flashes
@@ -2278,6 +2281,7 @@ let _dnaMap=null, _dnaScanId=0, _dnaScanning=false, _dnaProgress=0, _dnaSrcKey='
 let _dnaFoc=0.4, _dnaBright=1, _dnaDensity=0, _dnaPunch=0, _dnaHue=200, _dnaWarm=0, _dnaSection='', _dnaAnticip=0;
 let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70: textural "virtual-slider" levels conducted from the Song Map (so ONE toggle = a full rich show)
 let _dnaC=0, _cymCEnv=0, _dnaCell=0;   // v71: _dnaC = per-song-normalized + expanded MUSICAL-INTENSITY signal (deterministic, drives geometry complexity); _cymCEnv = its fast-attack/slow-release envelope (amplitude/color); _dnaCell = intensity-driven line->CELL crossfade (delicate lines verse -> filled BassForge mandala at the drop)
+let _dnaLufsB=1, _dnaHcdf=0, _dnaHarmFlow=0, _dnaSpread=0;   // v72 SONG EQUATION (from Song Map v2): perceptual LOUDNESS->brightness, HARMONIC-CHANGE->bloom, TONNETZ-velocity->flow, spectral SPREAD->ring fineness
 function _dnaFFT(re,im){ const n=re.length;
   for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
   for(let len=2;len<=n;len<<=1){ const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
@@ -2316,6 +2320,21 @@ async function _dnaGetPCM(){ try{
     if(typeof currentSrc!=='undefined' && currentSrc==='stream' && typeof streamEl!=='undefined' && streamEl && streamEl.src){
       const resp=await fetch(streamEl.src); const ab=await resp.arrayBuffer(); return await actx.decodeAudioData(ab); }
   }catch(e){ _dnaErr=String(e); return null; } return null; }
+// ===== SONG DNA v2 (PhD-grade) — additive perceptual feature helpers (verified in Node; see design/v72_song_dna_v2.md) =====
+// Harte 6-D Tonnetz tonal centroid from a 12-bin chroma at offset o (3 circles: 5ths, m3, M3). Harmonic-motion substrate.
+function _dnaTonnetz(chroma, o){ let s=0; for(let p=0;p<12;p++) s+=chroma[o+p]||0; if(s<1e-9) return null;
+  const z=new Float32Array(6);
+  for(let p=0;p<12;p++){ const c=(chroma[o+p]||0)/s, f=p/12*6.2832;
+    z[0]+=c*Math.sin(f*7); z[1]+=c*Math.cos(f*7); z[2]+=c*Math.sin(f*3); z[3]+=c*Math.cos(f*3); z[4]+=c*Math.sin(f*4); z[5]+=c*Math.cos(f*4); }
+  return z; }
+function _dnaBiquad(x, b0,b1,b2,a1,a2){ const y=new Float32Array(x.length); let x1=0,x2=0,y1=0,y2=0;
+  for(let n=0;n<x.length;n++){ const xn=x[n], yn=b0*xn+b1*x1+b2*x2-a1*y1-a2*y2; y[n]=yn; x2=x1;x1=xn;y2=y1;y1=yn; } return y; }
+function _dnaKweight(x, SR){ // ITU-R BS.1770 K-weighting (high-shelf + high-pass), cookbook biquads at SR
+  const A=Math.pow(10,3.9999/40), w=2*Math.PI*1681.97/SR, c=Math.cos(w), s=Math.sin(w), al=s/(2*0.7071), sq=2*Math.sqrt(A);
+  let b0=A*((A+1)+(A-1)*c+sq*al), b1=-2*A*((A-1)+(A+1)*c), b2=A*((A+1)+(A-1)*c-sq*al), a0=(A+1)-(A-1)*c+sq*al, a1=2*((A-1)-(A+1)*c), a2=(A+1)-(A-1)*c-sq*al;
+  const sh=_dnaBiquad(x, b0/a0,b1/a0,b2/a0,a1/a0,a2/a0);
+  const w2=2*Math.PI*38.13/SR, c2=Math.cos(w2), s2=Math.sin(w2), al2=s2/(2*0.5); b0=(1+c2)/2; b1=-(1+c2); b2=(1+c2)/2; a0=1+al2; a1=-2*c2; a2=1-al2;
+  return _dnaBiquad(sh, b0/a0,b1/a0,b2/a0,a1/a0,a2/a0); }
 async function _dnaScan(buf, id){
   const SR=buf.sampleRate, N=buf.length, ch0=buf.getChannelData(0), ch1=buf.numberOfChannels>1?buf.getChannelData(1):null;
   const FFTN=2048, HZ=25, hop=Math.max(256,Math.round(SR/HZ)), nf=Math.max(1,Math.floor((N-FFTN)/hop));
@@ -2323,6 +2342,7 @@ async function _dnaScan(buf, id){
   const re=new Float32Array(FFTN), im=new Float32Array(FFTN), half=FFTN>>1, binHz=SR/FFTN;
   const NB=24, edge=new Float32Array(NB+1); for(let b=0;b<=NB;b++) edge[b]=20*Math.pow((SR/2)/20, b/NB);
   const rms=new Float32Array(nf), cen=new Float32Array(nf), flux=new Float32Array(nf), bands=new Float32Array(nf*NB), chromaTS=new Float32Array(nf*12), chromaSum=new Float32Array(12);
+  const spread=new Float32Array(nf), rolloff=new Float32Array(nf), skew=new Float32Array(nf), kurt=new Float32Array(nf), tonn=new Float32Array(nf*6), hcdf=new Float32Array(nf);   // v2 perceptual axes
   const prev=new Float32Array(half);
   for(let f=0; f<nf; f++){ if(id!==_dnaScanId) return null;
     const off=f*hop;
@@ -2331,15 +2351,27 @@ async function _dnaScan(buf, id){
     let e=0,cnum=0,cden=0,fl=0;
     for(let k=1;k<half;k++){ const mg=Math.hypot(re[k],im[k]); e+=mg*mg; cnum+=k*mg; cden+=mg; const d=mg-prev[k]; if(d>0)fl+=d; prev[k]=mg; }
     rms[f]=Math.sqrt(e/half); cen[f]=cden>1e-9?(cnum/half/cden):0; flux[f]=fl;
+    // v2 spectral SHAPE moments (cen[f] already = linear-Hz centroid /(SR/2); add spread/skew/kurtosis/rolloff85)
+    { const cHz=cen[f]*(SR/2), thr=0.85*cden; let v=0,s3=0,s4=0,racc=0,done=false;
+      for(let k=1;k<half;k++){ const mg=Math.hypot(re[k],im[k]), d=k*binHz-cHz; v+=d*d*mg; s3+=d*d*d*mg; s4+=d*d*d*d*mg; racc+=mg; if(!done && racc>=thr){ rolloff[f]=k*binHz; done=true; } }
+      const den=cden>1e-9?cden:1, sp=Math.sqrt(Math.max(0,v/den)); spread[f]=sp; const c3=sp*sp*sp||1, c4=sp*sp*sp*sp||1; skew[f]=s3/den/c3; kurt[f]=s4/den/c4; }
     for(let b=0;b<NB;b++){ let bs=0; const k0=Math.max(1,Math.floor(edge[b]/binHz)), k1=Math.min(half,Math.floor(edge[b+1]/binHz)); for(let k=k0;k<k1;k++) bs+=Math.hypot(re[k],im[k]); bands[f*NB+b]=k1>k0?bs/(k1-k0):0; }
     for(let k=1;k<half;k++){ const fr=k*binHz; if(fr<55||fr>5000) continue; let pc=Math.round(12*Math.log2(fr/16.3516))%12; if(pc<0)pc+=12; const mg=Math.hypot(re[k],im[k]); chromaTS[f*12+pc]+=mg; chromaSum[pc]+=mg; }
     _dnaProgress=(f+1)/nf;
     if((f&127)===127) await new Promise(r=>setTimeout(r,0));
   }
   const norm=a=>{ let mx=1e-9; for(let i=0;i<a.length;i++) if(a[i]>mx)mx=a[i]; if(mx>0) for(let i=0;i<a.length;i++) a[i]/=mx; };
-  norm(rms); norm(flux); norm(cen);
+  norm(rms); norm(flux); norm(cen); norm(spread); norm(rolloff);   // v2 shape moments -> 0..1
   let cs=0; for(let p=0;p<12;p++) cs+=chromaSum[p]; if(cs>0) for(let p=0;p<12;p++) chromaSum[p]/=cs;
   for(let f=0;f<nf;f++){ let s=0; for(let p=0;p<12;p++) s+=chromaTS[f*12+p]; if(s>0) for(let p=0;p<12;p++) chromaTS[f*12+p]/=s; }
+  // v2 HARMONIC MOTION: per-frame Tonnetz tonal centroid + HCDF novelty (||z(t+1)-z(t-1)||) from the normalized chroma
+  for(let f=0;f<nf;f++){ const z=_dnaTonnetz(chromaTS, f*12); if(z) for(let i=0;i<6;i++) tonn[f*6+i]=z[i]; }
+  for(let f=0;f<nf;f++){ const a=Math.max(0,f-1), b=Math.min(nf-1,f+1); let d=0; for(let i=0;i<6;i++){ const e=tonn[b*6+i]-tonn[a*6+i]; d+=e*e; } hcdf[f]=Math.sqrt(d); }
+  norm(hcdf);
+  // v2 PERCEPTUAL LOUDNESS: K-weighted short-term LUFS (3s window), kept in dB (the conductor maps it)
+  const lufsST=new Float32Array(nf);
+  try{ const xK=_dnaKweight(ch0, SR), win=Math.round(SR*3)>>1;
+    for(let f=0;f<nf;f++){ const c=f*hop+(FFTN>>1); let s=0,cnt=0; for(let nn=c-win; nn<c+win; nn+=8){ const idx=nn|0; if(idx>=0 && idx<xK.length){ s+=xK[idx]*xK[idx]; cnt++; } } lufsST[f]=cnt?(-0.691+10*Math.log10(s/cnt+1e-12)):-70; } }catch(_){ lufsST.fill(-23); }
   // v71 WIDE-DYNAMIC-RANGE: per-song MUSICAL-INTENSITY arc (the verse<->drop "how much is going on" fader).
   // Composite = loudness + spectral flux + spectral ENTROPY (loudness-independent busyness) + active-band COVERAGE
   // + centroid, then PERCENTILE-normalized (p05..p95) so every song fills 0..1 (the fix for "too little difference").
@@ -2354,8 +2386,8 @@ async function _dnaScan(buf, id){
   const _lo=_pc(0.05), _sp=Math.max(1e-3,_pc(0.95)-_lo);
   for(let f=0;f<nf;f++) _Iarr[f]=Math.max(0,Math.min(1,(_Iarr[f]-_lo)/_sp));
   const _secs=_dnaSections(rms,HZ,nf);
-  return { hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
-    ts:{rms,cen,flux,bands,chroma:chromaTS,intensity:_Iarr}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70+v71: sections feed the drop signal; intensity = the per-song complexity arc
+  return { schema:2, hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
+    ts:{rms,cen,flux,bands,chroma:chromaTS,intensity:_Iarr, spread,rolloff,skew,kurt,tonn,hcdf,lufsST}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70+v71 + v2 perceptual axes (shape moments / Tonnetz+HCDF / LUFS) — additive, conductor wiring next phase
 // Only 'track' (decoded buffer) + 'stream' (downloadable URL) carry scannable PCM. demo (live synth),
 // mic, yt (IFrame), none/loading -> NO key. A keyless source is NEVER scanned, and a FAILED attempt
 // LATCHES its key (via _dnaErr in the guard) so it never retries -> this is what kills the toast-spam loop.
@@ -2382,6 +2414,7 @@ async function dnaEnsureScan(){
 }
 function dnaConduct(songT){
   if(!_dnaMap) return;
+  _dnaLufsB=1; _dnaHcdf=0; _dnaHarmFlow=0; _dnaSpread=0;   // v72: re-peg defaults each frame so a v1/partial map (missing v2 ts fields) = byte-identical to v71 (no stale bleed across songs)
   const m=_dnaMap, NB=m.nb||24, idx=Math.max(0,Math.min(m.n-1, Math.floor(songT*m.hz)));
   const rms=m.ts.rms[idx]||0, cen=m.ts.cen[idx]||0.4, flux=m.ts.flux[idx]||0;
   // band groups from the pre-scanned spectrum (bands are normalized 0..1) — deterministic per songT
@@ -2421,6 +2454,11 @@ function dnaConduct(songT){
   // v71: intensity also crossfades LINE -> filled CELL (the BassForge plate). Verse = delicate nodal lines;
   //      drop = dense iridescent antinode cells. smoothstep(0.45,0.92) so cells only bloom in the upper range.
   { const t=Math.max(0,Math.min(1,(_dnaC-0.45)/0.47)); _dnaCell = (cfg.cymComplexity>0) ? t*t*(3-2*t) : 0; }
+  // ===== v72 SONG EQUATION — perceptual + harmonic-motion drivers (Song Map v2; deterministic; default-inert if absent) =====
+  if(m.ts.lufsST){ const lu=m.ts.lufsST[idx]; if(lu===lu) _dnaLufsB = Math.max(0.62, Math.min(1.30, 0.7 + (Math.max(-32,Math.min(-6,lu))+32)/26*0.6)); }  // perceptual loudness -> brightness mult (quiet-but-bright reads right; not energy-fooled)
+  if(m.ts.hcdf){ _dnaHcdf = Math.max(0, Math.min(1, m.ts.hcdf[idx]||0)); }                                                                                  // harmonic-change novelty -> bloom on CHORD changes
+  if(m.ts.tonn){ const k=Math.min(idx,5); let d=0; for(let i=0;i<6;i++){ const e=(m.ts.tonn[idx*6+i]||0)-(m.ts.tonn[(idx-k)*6+i]||0); d+=e*e; } _dnaHarmFlow=Math.min(1,Math.sqrt(d)*2.6); }  // Tonnetz VELOCITY -> harmonic-motion flow
+  if(m.ts.spread){ _dnaSpread = Math.max(0, Math.min(1, m.ts.spread[idx]||0)); }                                                                            // spectral SPREAD -> ring fineness (timbral axis)
 }
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
@@ -2670,7 +2708,7 @@ function drawGLCymatic(tt){
     nModes = Math.max(4, Math.min(nModes, bloom));   // only ever reduces/holds (clamped to the cap)
   }
   let scale = 2.2;
-  if(_cxD) scale *= (1 - 0.18*_dnaC);   // v71: intensity grows the medallion to reveal more concentric structure (deterministic)
+  if(_cxD) scale *= (1 - 0.08*_dnaC);   // v71/v72: intensity grows the medallion slightly (gentler — keep it a CONTAINED medallion, not a screen-filling gradient; ring fineness comes from uKMul/spread instead)
   let temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
   // v56-7: intensity sharpens lines (raises uTemp toward crisp). 100 = +0 (v54 baseline), lower = softer.
   const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100; temp = Math.min(1, temp + (_it-1)*0.25);
@@ -2726,7 +2764,8 @@ function drawGLCymatic(tt){
     const flowGain=(typeof cfg.cymFlow==='number'?cfg.cymFlow:0)/100*1.4;
     const _dnaR=(cfg.cymSongDNA&&_dnaMap)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
     const _cxR=_cxD?_dnaC*0.55:0;                             // v71: intensity accelerates rotation into the drop (deterministic raw _dnaC)
-    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR + _cxR); }
+    const _hmR=(cfg.cymSongDNA&&_dnaMap)?_dnaHarmFlow*0.6:0;   // v72: TONNETZ harmonic motion -> flow (static harmony = still figure; moving chords = it flows; deterministic)
+    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR + _cxR + _hmR); }
   const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap)) ? _cymFlowPh : 0;
   // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
   _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
@@ -2746,6 +2785,7 @@ function drawGLCymatic(tt){
   let _uHat   = _cymHat   * _gHat/100;
   if(_dnaOn){ _uCrisp = Math.max(_uCrisp, _dnaCrispL*0.65); _uGlow = Math.max(_uGlow, _dnaGlowL*0.55); _uHat = Math.max(_uHat, _dnaHatL*0.55); }
   if(_cxD){ _uCrisp = Math.max(_uCrisp, Math.min(0.55, 0.30 + 0.55*_cymCEnv)); _uGlow = Math.max(_uGlow, 0.22 + 0.42*_cymCEnv); }   // v71: denser = SHARPER + brighter; CAP crisp at 0.55 so cell-band dark gaps NEVER close (>0.83 would solid-fill -> the rejected v50 mush)
+  if(_dnaOn && _dnaHcdf>0.25) _uGlow = Math.max(_uGlow, _dnaHcdf*0.55);   // v72: HARMONIC-CHANGE bloom — the figure flares on chord changes (HCDF novelty), not just on beats
   _uGlow *= (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
   let _uBright = 1.0;
   if((typeof cfg.cymBright==='number'?cfg.cymBright:0)>0){
@@ -2756,7 +2796,8 @@ function drawGLCymatic(tt){
   if(_dnaOn){   // v70 DNA: the figure breathes the song's COMPOSED brightness arc — verses dim, choruses/drops bright (fixes the dead _curLight wire)
     const _bpm=(typeof currentBPM==='number'&&currentBPM>40&&currentBPM<210)?currentBPM:(_dnaMap.bpm||124);
     const _bph=(songT*(_bpm/60))%1.0;
-    _uBright = Math.max(_uBright, Math.max(0.7,Math.min(1.4, 0.7 + _dnaBright*0.5)) * (0.92+0.08*Math.cos(_bph*6.2832)) * _refAtt);   // v70: cap at the proven 1.4 ceiling (no over-bright at drops)
+    const _bb = Math.min(1.4, Math.max(0.62, (0.65 + _dnaBright*0.45) * _dnaLufsB));   // v72: K-weighted LUFS modulates the composed arc -> PERCEPTUAL brightness (quiet-but-bright reads bright); clamped to the proven 1.4 ceiling
+    _uBright = Math.max(_uBright, _bb * (0.92+0.08*Math.cos(_bph*6.2832)) * _refAtt);
   }
   // (e) ping accent (reuse the snap-reset _cymPing buffer) -> WHICH ring flashes (radius from its Bessel zero)
   let _pmI=-1,_pmV=0; for(let k=0;k<CYM_NMODES;k++){ if(_cymPing[k]>_pmV){_pmV=_cymPing[k];_pmI=k;} }
@@ -2819,8 +2860,11 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uTiltY'), _tiltY);
     g.uniform1f(glU(P,'uSymBreath'), _uSymBreath);   // §6: 0 when cymSymBreath=0 -> shader selects v58 kfold (bit-identical)
     g.uniform1f(glU(P,'uSymWobble'), _uSymWobble);
-    g.uniform1f(glU(P,'uCell'), Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0));   // v60 🌊 water-cell fill mix; v71: intensity crossfades line->filled cells (BassForge plate at the drop)
-    g.uniform1f(glU(P,'uKMul'), _cxD ? (1 + 0.6*_dnaC) : 1.0);   // v71: tighten concentric rings on intense passages (1.0 = byte-identical when complexity off)
+    const _cellEffU = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0);   // v71 line->filled-cell crossfade
+    const _ukMulU = (cfg.cymSongDNA&&_dnaMap) ? (1 + (_cxD?0.6*_dnaC:0) + _dnaSpread*0.30) : 1.0;     // v71 intensity + v72 spread ring-fineness — computed ONCE so the shader uniform + laser-SIM stash can't diverge
+    g.uniform1f(glU(P,'uCell'), _cellEffU);   // v60 🌊 water-cell fill mix
+    g.uniform1f(glU(P,'uKMul'), _ukMulU);
+    g.uniform1f(glU(P,'uCellGap'), 0.40 - (typeof cfg.cymCellGap==='number'?cfg.cymCellGap:0)/100*0.18);   // v72: cell TRANSPARENCY — 0->0.40 (current, thin gaps) .. 100->0.22 (wide dark gaps = clear complex structure)
     g.uniform1f(glU(P,'uFuse'),  fused ? 1.0 : 0.0);
     g.uniform1f(glU(P,'uPunch'), _uPunch);
     // ---- v60 full-song-sync + CymaScope uniforms (all default to a neutral value -> cymCell=0 byte-identical) ----
@@ -2838,7 +2882,7 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uKeyWarm'), _uKeyWarm);
     // v67: stash the EXACT cellHue inputs so the laser mandala colors identically (deterministic; no re-derivation drift; zero shader effect)
     _lzUHarm=_uHarm; _lzChPhase=_chPhase; _lzKeyBase=_uKeyBase; _lzKeyWarm=_uKeyWarm; _lzUFlow=_uFlow;
-    _lzSym=sym; _lzCellEff=Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0); _lzKMul=(_cxD?(1+0.6*_dnaC):1.0);   // v71: stash the EXACT geometry the shader used so the laser SIM matches
+    _lzSym=sym; _lzCellEff=_cellEffU; _lzKMul=_ukMulU;   // v71/v72: stash the EXACT geometry the shader used (same locals as the uniforms) so the laser SIM can never diverge
     _lzUCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
     g.uniform1f(glU(P,'uCellPal'), cfg.cymCellPalette?1.0:0.0);
     g.uniform1f(glU(P,'uBgTint'),  cfg.cymBgTint?1.0:0.0);
@@ -5692,6 +5736,7 @@ bindSw('swCymBrain', 'cymBrain', (on) => {
 });
 bindRange('setCymIntensity', 'cymIntensity');
 bindRange('setCymComplexity', 'cymComplexity');
+bindRange('setCymCellGap', 'cymCellGap');
 // v56 cymatic-organism controls
 bindSw('swCymTesseract', 'cymTesseract', () => { _tssSnapSeen = null; });   // re-arm rotation on enable
 bindSw('swCymTessSpin', 'cymTessSpin');
@@ -5972,7 +6017,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
