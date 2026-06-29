@@ -2272,6 +2272,7 @@ function cymModeCap(){ return (typeof LITE!=='undefined' && LITE) ? ((typeof dQ=
    of every other sync slider. Default OFF -> zero effect on saved presets. FREE classical DSP, deterministic. */
 let _dnaMap=null, _dnaScanId=0, _dnaScanning=false, _dnaProgress=0, _dnaSrcKey='', _dnaErr='';
 let _dnaFoc=0.4, _dnaBright=1, _dnaDensity=0, _dnaPunch=0, _dnaHue=200, _dnaWarm=0, _dnaSection='', _dnaAnticip=0;
+let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70: textural "virtual-slider" levels conducted from the Song Map (so ONE toggle = a full rich show)
 function _dnaFFT(re,im){ const n=re.length;
   for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
   for(let len=2;len<=n;len<<=1){ const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
@@ -2294,9 +2295,17 @@ function _dnaSections(rms,hz,n){ if(n<hz*4) return [{t0:0,t1:n/hz,energy:0.5,lab
   for(let i=1;i<n;i++){ if(Math.abs(sm[i]-lvl)>0.18 && (i-t0)>minLen){ segs.push({a:t0,b:i}); t0=i; lvl=sm[i]; } }
   segs.push({a:t0,b:n});
   return segs.map(s=>{ let e=0; for(let i=s.a;i<s.b;i++) e+=sm[i]; e/=Math.max(1,(s.b-s.a)); const label=e<0.3?'low':e<0.6?'mid':'high'; return { t0:s.a/hz, t1:s.b/hz, energy:+e.toFixed(3), label }; }); }
-function _dnaDrops(rms,hz,n){ const w=Math.round(hz*1.0), sm=new Float32Array(n); for(let i=0;i<n;i++){ let s=0,c=0; for(let j=-w;j<=w;j++){ const k=i+j; if(k>=0&&k<n){s+=rms[k];c++;} } sm[i]=s/c; }
-  const drops=[], gap=Math.round(hz*8); let last=-gap; const look=Math.round(hz*2.5);
-  for(let i=look;i<n;i++){ if(i-last<gap) continue; if(sm[i]-sm[i-look]>0.32 && sm[i]>0.6){ drops.push({t:i/hz}); last=i; } } return drops; }
+// v70: drops = (a) a smoothed-RMS surge into a loud moment + (b) a quiet->loud SECTION jump (the canonical EDM drop —
+// robust where (a) is blunted by the ~1s smoothing, since the smoothed peak only reaches ~0.65 not 1.0). Thresholds
+// tuned to the real smoothed dynamic range so EDM (Bangarang) gets its drops while steady rap (Godzilla) stays ~0.
+function _dnaDrops(rms,hz,n,sections){ const w=Math.round(hz*1.0), sm=new Float32Array(n); for(let i=0;i<n;i++){ let s=0,c=0; for(let j=-w;j<=w;j++){ const k=i+j; if(k>=0&&k<n){s+=rms[k];c++;} } sm[i]=s/c; }
+  const cand=[], look=Math.round(hz*2.5);
+  for(let i=look;i<n;i++){ if(sm[i]-sm[i-look]>0.26 && sm[i]>0.50 && sm[i-look]<0.38) cand.push(i/hz); }                // (a) STRONG quiet->loud surge only (EDM drop, not a rap beat-in)
+  if(sections){ for(let s=1;s<sections.length;s++){ const a=sections[s-1], b=sections[s];                              // (b) quiet->loud section jump
+    if(b.energy-a.energy>0.18 && a.energy<0.40 && b.energy>0.40) cand.push(b.t0); } }   // b>0.40 = a genuinely LOUD target (EDM drop), excludes a moderate rap verse (~0.36)
+  cand.sort((x,y)=>x-y);
+  const drops=[], gap=6; for(const t of cand){ if(!drops.length || t-drops[drops.length-1].t>=gap) drops.push({t:+t.toFixed(2)}); }
+  return drops; }
 async function _dnaGetPCM(){ try{
     if(typeof currentSrc!=='undefined' && currentSrc==='track' && typeof trackBuffer!=='undefined' && trackBuffer) return trackBuffer;
     if(typeof currentSrc!=='undefined' && currentSrc==='stream' && typeof streamEl!=='undefined' && streamEl && streamEl.src){
@@ -2326,17 +2335,28 @@ async function _dnaScan(buf, id){
   norm(rms); norm(flux); norm(cen);
   let cs=0; for(let p=0;p<12;p++) cs+=chromaSum[p]; if(cs>0) for(let p=0;p<12;p++) chromaSum[p]/=cs;
   for(let f=0;f<nf;f++){ let s=0; for(let p=0;p<12;p++) s+=chromaTS[f*12+p]; if(s>0) for(let p=0;p<12;p++) chromaTS[f*12+p]/=s; }
+  const _secs=_dnaSections(rms,HZ,nf);
   return { hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
-    ts:{rms,cen,flux,bands,chroma:chromaTS}, sections:_dnaSections(rms,HZ,nf), drops:_dnaDrops(rms,HZ,nf) }; }
+    ts:{rms,cen,flux,bands,chroma:chromaTS}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70: pass sections so the section-jump drop signal runs
+// Only 'track' (decoded buffer) + 'stream' (downloadable URL) carry scannable PCM. demo (live synth),
+// mic, yt (IFrame), none/loading -> NO key. A keyless source is NEVER scanned, and a FAILED attempt
+// LATCHES its key (via _dnaErr in the guard) so it never retries -> this is what kills the toast-spam loop.
+function _dnaKeyFor(){
+  if(typeof currentSrc==='undefined') return '';
+  if(currentSrc==='track')  return (typeof trackBuffer!=='undefined'&&trackBuffer)?('track:t'+trackBuffer.duration.toFixed(2)):'';
+  if(currentSrc==='stream') return (typeof streamEl!=='undefined'&&streamEl&&streamEl.src)?('stream:'+streamEl.src):'';
+  return '';
+}
 async function dnaEnsureScan(){
   if(!cfg.cymSongDNA) return;
-  const key=(typeof currentSrc!=='undefined'?currentSrc:'')+':'+((typeof streamEl!=='undefined'&&streamEl&&streamEl.src)||(typeof trackBuffer!=='undefined'&&trackBuffer?('t'+trackBuffer.duration.toFixed(2)):''));
-  if(key===_dnaSrcKey && (_dnaMap||_dnaScanning)) return;
+  const key=_dnaKeyFor();
+  if(!key) return;                                                  // demo/mic/yt/none -> no PCM -> never scan (no toast)
+  if(key===_dnaSrcKey && (_dnaMap||_dnaScanning||_dnaErr)) return;  // done | in-flight | FAILED(latched) -> don't retry this source
   _dnaSrcKey=key; _dnaMap=null; _dnaErr=''; const id=++_dnaScanId; _dnaScanning=true; _dnaProgress=0;
   try{ if(typeof toast==='function') toast('🧬 Decoding song DNA…'); }catch(_){}
   const buf=await _dnaGetPCM();
   if(id!==_dnaScanId) return;
-  if(!buf){ _dnaScanning=false; _dnaErr=_dnaErr||'no PCM (YouTube-embed/mic unsupported)'; try{ if(typeof toast==='function') toast('DNA: '+_dnaErr,'err'); }catch(_){} return; }
+  if(!buf){ _dnaScanning=false; _dnaErr=_dnaErr||'no PCM (this source has no scannable audio)'; try{ if(typeof toast==='function') toast('DNA: '+_dnaErr,'err'); }catch(_){} return; }
   const map=await _dnaScan(buf,id);
   if(id!==_dnaScanId) return;
   _dnaScanning=false; _dnaMap=map;
@@ -2344,17 +2364,32 @@ async function dnaEnsureScan(){
 }
 function dnaConduct(songT){
   if(!_dnaMap) return;
-  const m=_dnaMap, idx=Math.max(0,Math.min(m.n-1, Math.floor(songT*m.hz)));
-  const rms=m.ts.rms[idx]||0, cen=m.ts.cen[idx]||0.4;
+  const m=_dnaMap, NB=m.nb||24, idx=Math.max(0,Math.min(m.n-1, Math.floor(songT*m.hz)));
+  const rms=m.ts.rms[idx]||0, cen=m.ts.cen[idx]||0.4, flux=m.ts.flux[idx]||0;
+  // band groups from the pre-scanned spectrum (bands are normalized 0..1) — deterministic per songT
+  const B=m.ts.bands, o=idx*NB; let lmid=0,mid=0,high=0,hat=0;
+  for(let b=4;b<9 &&b<NB;b++) lmid+=B[o+b]||0;  lmid/=5;
+  for(let b=9;b<16&&b<NB;b++) mid +=B[o+b]||0;  mid /=7;
+  for(let b=16;b<NB;b++)      high+=B[o+b]||0;  high/=Math.max(1,NB-16);
+  for(let b=19;b<NB;b++)      hat +=B[o+b]||0;  hat /=Math.max(1,NB-19);
+  // current section + anticipation/punch from the STRUCTURAL map (lookahead = the thing live audio can't do)
   let sec=null; for(let i=0;i<m.sections.length;i++){ if(songT>=m.sections[i].t0 && songT<m.sections[i].t1){ sec=m.sections[i]; break; } }
   const secE=sec?sec.energy:rms; _dnaSection=sec?sec.label:'';
   let antic=0; for(let i=0;i<m.drops.length;i++){ const dt=m.drops[i].t-songT; if(dt>=0 && dt<4) antic=Math.max(antic, 1-dt/4); } _dnaAnticip=antic;
   let punch=0; for(let i=0;i<m.drops.length;i++){ const a=songT-m.drops[i].t; if(a>=0 && a<0.6) punch=Math.max(punch, 1-a/0.6); } _dnaPunch=punch;
-  _dnaFoc    = Math.max(0,Math.min(1, cen*0.7 + 0.15 + antic*0.15));
-  _dnaBright = Math.max(0,Math.min(1.6, 0.55 + secE*0.55 + rms*0.25 + antic*0.2 + punch*0.4));
-  _dnaDensity= Math.max(0,Math.min(1, secE*0.6 + antic*0.4 + punch*0.5));
+  // ----- composed STRUCTURAL drivers (feed geometry + the brightness/color arc) -----
+  _dnaFoc    = Math.max(0,Math.min(1, cen*0.6 + high*0.25 + 0.12 + antic*0.18));   // shape: centroid + treble lacework, builds into drops
+  _dnaBright = Math.max(0,Math.min(1.6, 0.5 + secE*0.55 + rms*0.25 + antic*0.22 + punch*0.45));
+  _dnaDensity= Math.max(0,Math.min(1, secE*0.55 + antic*0.45 + punch*0.5 + high*0.2));
   let dp=0,dv=0; for(let p=0;p<12;p++){ const c=m.ts.chroma[idx*12+p]||0; if(c>dv){dv=c;dp=p;} }
-  _dnaHue=(m.key.hue + dp*4)%360; _dnaWarm=m.key.minor?1:0;
+  _dnaHue=(m.key.hue + dp*6)%360; _dnaWarm=m.key.minor?1:0;
+  // ----- TEXTURAL virtual-slider LEVELS (0..1) — auto-raise the proven sync axes so ONE toggle = a rich, alive
+  //       figure (the live envelopes still supply micro-detail; these set the floor). All AMP/color class. -----
+  _dnaCrispL = Math.max(0,Math.min(1, 0.22 + flux*0.6 + high*0.3 + antic*0.3));    // line definition: onset flux + treble + build tension
+  _dnaGlowL  = Math.max(0,Math.min(1, 0.18 + (lmid+mid)*0.55 + secE*0.30));        // luminous halo: sustained harmonic body
+  _dnaHatL   = Math.max(0,Math.min(1, hat*0.85 + flux*0.20));                      // rim sparkle: hi-hat band
+  _dnaHarmL  = Math.max(0,Math.min(1, 0.40 + mid*0.40 + secE*0.20));               // harmony color spread
+  _dnaFlowR  = 0.35 + flux*0.6 + secE*0.35 + antic*0.40;                           // rotation/flow RATE multiplier (not 0..1)
 }
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
@@ -2499,7 +2534,7 @@ function buildCymCoef(){
     if(_cymBloomEnv > 0.15) kDraw += (_cymBloomEnv > 0.5 ? 2 : 1);
   }
   kDraw = Math.min(CYM_NMODES, kDraw);
-  if(cfg.cymSongDNA && _dnaMap && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*5));   // v69 DNA: denser figure in big sections / into drops
+  if(cfg.cymSongDNA && _dnaMap && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*2));   // v70 DNA: GENTLY denser in big sections (+2 max — keep the CLEAN delicate sacred-geometry look, NOT the rejected v50 density-crank; soft-gate may be off by default)
   // v60 #10: water-cell mode lights MORE modes (denser CymaScope field) — desktop only; soft-gate still bounds runaway.
   if((typeof cfg.cymCell==='number'?cfg.cymCell:0)>0.001 && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(cfg.cymCell/100*8));
   const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);   // value-rank (v58 already pays this)
@@ -2555,7 +2590,7 @@ function drawGLCymatic(tt){
   _cymEnsureLUT();
   const songT = genSongTime(tt);                     // DETERMINISTIC song time (seek-snapped)
   _cymLastSongT = songT;
-  if(cfg.cymSongDNA){ if(playing && !_dnaMap && !_dnaScanning) dnaEnsureScan(); dnaConduct(songT); }   // v69 DNA decoder: pre-scan once + conduct from the Song Map
+  if(cfg.cymSongDNA){ if(playing){ const _dk=_dnaKeyFor(); if(_dk && _dk!==_dnaSrcKey) dnaEnsureScan(); } dnaConduct(songT); }   // v69 DNA decoder: scan once per NEW scannable source (keyless/failed never re-fire) + conduct from the Song Map
   const _snap0 = _genSnap;                            // v58 #4: capture before buildCymCoef consumes the flag
   const coef = buildCymCoef();                       // consumes _genSnap exactly once
   if(_snap0) _cymPunchEnv = 0;                        // reset the kick-punch envelope on seek/restart/seed change
@@ -2631,21 +2666,37 @@ function drawGLCymatic(tt){
   _cymFluxS = cymEMA(_cymFluxS, (typeof Q!=='undefined'&&Q&&Q.flux===Q.flux)?Q.flux:0, 0.85, _snap0);
   { const dT=Math.max(0,Math.min(0.1, songT-_cymFlowLastT)); _cymFlowLastT=songT;
     const flowGain=(typeof cfg.cymFlow==='number'?cfg.cymFlow:0)/100*1.4;
-    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain); }
-  const _uFlow = ((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) ? _cymFlowPh : 0;
+    const _dnaR=(cfg.cymSongDNA&&_dnaMap)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
+    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR); }
+  const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap)) ? _cymFlowPh : 0;
   // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
   _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
   _cymGlow   = cymEMA(_cymGlow,   (typeof harmEnv==='number'?harmEnv:0),   0.92, _snap0);
   _cymHat    = cymEMA(_cymHat,    (typeof hatEnv==='number'?hatEnv:0),     0.78, _snap0);
   _cymBright = cymEMA(_cymBright, (typeof audioRMS==='number'?audioRMS:0), 0.88, _snap0);
-  const _uCrisp = _cymCrisp * (typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0)/100;
-  const _uGlow  = _cymGlow  * (typeof cfg.cymGlow==='number'?cfg.cymGlow:0)/100 * (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
-  const _uHat   = _cymHat   * (typeof cfg.cymHat==='number'?cfg.cymHat:0)/100;
+  // v70 DNA: auto-raise the textural sync axes from the song's pre-scanned structure so ONE toggle = a full, rich,
+  // alive figure. The live envelopes (_cymCrisp/_cymGlow/_cymHat) still supply micro-detail; DNA sets the "virtual
+  // slider" floor (never below the operator's own slider, so presets are never reduced) PLUS a direct map floor so
+  // sustained/quiet passages still glow (the live envelope alone reads dim). All AMP/color class -> live-smoothed OK.
+  const _dnaOn = !!(cfg.cymSongDNA && _dnaMap);
+  const _gCrisp = _dnaOn ? Math.max((typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0), _dnaCrispL*100) : (typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0);
+  const _gGlow  = _dnaOn ? Math.max((typeof cfg.cymGlow==='number'?cfg.cymGlow:0),  _dnaGlowL*100)  : (typeof cfg.cymGlow==='number'?cfg.cymGlow:0);
+  const _gHat   = _dnaOn ? Math.max((typeof cfg.cymHat==='number'?cfg.cymHat:0),    _dnaHatL*100)   : (typeof cfg.cymHat==='number'?cfg.cymHat:0);
+  let _uCrisp = _cymCrisp * _gCrisp/100;
+  let _uGlow  = _cymGlow  * _gGlow/100;
+  let _uHat   = _cymHat   * _gHat/100;
+  if(_dnaOn){ _uCrisp = Math.max(_uCrisp, _dnaCrispL*0.65); _uGlow = Math.max(_uGlow, _dnaGlowL*0.55); _uHat = Math.max(_uHat, _dnaHatL*0.55); }
+  _uGlow *= (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
   let _uBright = 1.0;
   if((typeof cfg.cymBright==='number'?cfg.cymBright:0)>0){
     const _bpm=(typeof currentBPM==='number'&&currentBPM>40&&currentBPM<210)?currentBPM:124;
     const _bph=(songT*(_bpm/60))%1.0;
     _uBright = (0.85 + _cymBright*0.55*(cfg.cymBright/100)) * (0.93+0.07*Math.cos(_bph*6.2832)) * _refAtt;   // floor lifted so quiet moments stay vivid, not dim
+  }
+  if(_dnaOn){   // v70 DNA: the figure breathes the song's COMPOSED brightness arc — verses dim, choruses/drops bright (fixes the dead _curLight wire)
+    const _bpm=(typeof currentBPM==='number'&&currentBPM>40&&currentBPM<210)?currentBPM:(_dnaMap.bpm||124);
+    const _bph=(songT*(_bpm/60))%1.0;
+    _uBright = Math.max(_uBright, Math.max(0.7,Math.min(1.4, 0.7 + _dnaBright*0.5)) * (0.92+0.08*Math.cos(_bph*6.2832)) * _refAtt);   // v70: cap at the proven 1.4 ceiling (no over-bright at drops)
   }
   // (e) ping accent (reuse the snap-reset _cymPing buffer) -> WHICH ring flashes (radius from its Bessel zero)
   let _pmI=-1,_pmV=0; for(let k=0;k<CYM_NMODES;k++){ if(_cymPing[k]>_pmV){_pmV=_cymPing[k];_pmI=k;} }
@@ -2660,13 +2711,14 @@ function drawGLCymatic(tt){
   const _uEllip = Math.max(-0.5,Math.min(0.5,_cymEllip)) * (typeof cfg.cymStereo==='number'?cfg.cymStereo:0)/100 * 0.08;
   // (a) chroma+key -> HARMONY hue: dominant-chroma circular mean + key warm/cool + confidence-gated spread
   let _chPhase=0, _uHarm=0;
-  if((typeof cfg.cymHarmonyGain==='number'?cfg.cymHarmonyGain:0)>0 && typeof _chromaN!=='undefined' && _chromaN){
+  if(((typeof cfg.cymHarmonyGain==='number'?cfg.cymHarmonyGain:0)>0 || _dnaOn) && typeof _chromaN!=='undefined' && _chromaN){
     let cx=0,cy=0; for(let p=0;p<12;p++){ const a=p/12*6.2832; cx+=_chromaN[p]*Math.cos(a); cy+=_chromaN[p]*Math.sin(a); }
     _chPhase=((Math.atan2(cy,cx)/6.2832)+1)%1;
-    _uHarm=((typeof _keyConfS!=='undefined'&&_keyConfS===_keyConfS)?_keyConfS:0.5) * (cfg.cymHarmonyGain/100);
+    const _hg=(typeof cfg.cymHarmonyGain==='number'?cfg.cymHarmonyGain:0)/100;
+    _uHarm=((typeof _keyConfS!=='undefined'&&_keyConfS===_keyConfS)?_keyConfS:0.5) * (_dnaOn ? Math.max(_hg,_dnaHarmL*0.5) : _hg);   // v70 DNA: floor the harmony color spread so the key-color reads
   }
-  const _uKeyBase = ((typeof _keyHue==='number'?_keyHue:200)/360);
-  const _uKeyWarm = (typeof _keyIsMinor!=='undefined' && _keyIsMinor) ? 1.0 : 0.0;
+  const _uKeyBase = _dnaOn ? (_dnaHue/360) : ((typeof _keyHue==='number'?_keyHue:200)/360);     // v70 DNA: warm/cool key tint from the SONG'S key
+  const _uKeyWarm = _dnaOn ? _dnaWarm : ((typeof _keyIsMinor!=='undefined' && _keyIsMinor) ? 1.0 : 0.0);
   glDrawSingle(FRAG_CYMATIC, 'cymatic', songT, (P)=>{
     const g=GL;
     g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, _cymLUTtex); g.uniform1i(glU(P,'uBessel'), 1);
@@ -2680,7 +2732,7 @@ function drawGLCymatic(tt){
     const cen = (typeof centroid==='number' && centroid===centroid) ? centroid : 0.4;
     const flt = (typeof flatness==='number' && flatness===flatness) ? flatness : 0.3;
     const en  = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0.3;
-    let base = (typeof _keyHue==='number' ? _keyHue : (cen*300+200));
+    let base = _dnaOn ? _dnaHue : (typeof _keyHue==='number' ? _keyHue : (cen*300+200));   // v70 DNA: hue painted by the SONG'S key + dominant chroma
     // v56-4: route the body base hue through the active palette band (Spectrum/passthrough = v54).
     if(cfg.cymPalette && typeof paletteHue==='function'){ const _pi=_palIdx, _ho=_palHueOff; _palIdx=cfg.palette; _palHueOff=0; base=paletteHue(base); _palIdx=_pi; _palHueOff=_ho; }
     // v56-6: pure-spectrum locks hue to the spectrum (drop the song-time drift term).
@@ -2689,8 +2741,8 @@ function drawGLCymatic(tt){
     const _hueN  = ((hueDeg%360)+360)%360;
     g.uniform1f(glU(P,'uHue'),  _hueN);
     _cymBaseHue = _hueN;   // v56-1: stash for the tesseract (same hue family)
-    g.uniform1f(glU(P,'uSat'),  Math.max(50, Math.min(90, 90 - flt*40)));
-    g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, 40 + en*22)));
+    g.uniform1f(glU(P,'uSat'),  _dnaOn ? Math.max(80, Math.min(96, 92 - flt*16)) : Math.max(50, Math.min(90, 90 - flt*40)));   // v70 DNA: fully-saturated pure hues (operator's hard requirement)
+    g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, _dnaOn ? (38 + _dnaBright*22) : (40 + en*22))));   // v70 DNA: lightness rides the composed loudness arc (was the dead _curLight wire)
     // Phase B: per-mode hue vectors + toggle (cheap; reuses the modal loop). LITE-under-load drops to
     // Phase-A single hue (zero per-pixel atan + zero accumulation via the uFreqColor>0.5 branch).
     g.uniform2fv(glU(P,'uModeHV'), _cymModeHV);
@@ -4673,6 +4725,7 @@ async function loadTrackObj(r){
   if(actx.state === 'suspended') await actx.resume();
   if(myGen !== loadGen) return;
   currentSrc = 'loading';                  // mid-load: tapping ▶ must NOT start the demo (the "atlas sample" bug)
+  _dnaMap=null; _dnaSrcKey=''; _dnaErr=''; _dnaScanning=false; _dnaScanId++;   // v70 DNA: invalidate the Song Map on EVERY new song so a fresh scan always runs (root-fix for same-duration track key collisions)
   playBtn.textContent = '⏳'; playBtn.classList.add('playing');
   npTitle.textContent  = r.title;
   npArtist.textContent = r.artist + ' · loading…';
@@ -5596,7 +5649,7 @@ bindSw('swCymFuse', 'cymFuse', () => { _tssSnapSeen = null; });   // re-arm the 
 bindRange('setCymPunch', 'cymPunch', () => { _cymPunchEnv = 0; });
 bindRange('setCymSync', 'cymSync');
 bindRange('setCymLead', 'cymLead');
-bindSw('swCymSongDNA', 'cymSongDNA', on => { if(on){ if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } else { _dnaMap=null; _dnaScanId++; _dnaScanning=false; _dnaSrcKey=''; } });
+bindSw('swCymSongDNA', 'cymSongDNA', on => { if(on){ if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } else { _dnaMap=null; _dnaScanId++; _dnaScanning=false; _dnaSrcKey=''; _dnaErr=''; } });
 // v59 cymatic redesign controls — de-pop (§1-3) + decompress (§4-5) + fluidity (§6-7)
 bindSw('swCymHyst', 'cymHyst', () => { _cymDom = -1; _cymDomHold = 0; });
 bindSw('swCymSmooth', 'cymSmooth');
@@ -5856,7 +5909,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
