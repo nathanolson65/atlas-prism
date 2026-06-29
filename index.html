@@ -1969,6 +1969,8 @@ uniform float uSym;
 uniform float uNModes;
 uniform vec2  uModeHV[NMODES];   // Phase B: unit (cos,sin) of each mode's representative hue (baked in JS)
 uniform float uFreqColor;        // Phase B: 0 = Phase-A key hue; 1 = per-mode circular-mean dominant hue
+uniform float uEmoHue;           // v75 EMOTION ENGINE: the song's positive-emotion hue (0..1 fraction)
+uniform float uEmoAmt;           // v75: how strongly the final figure hue is pulled toward uEmoHue (0 = off/byte-identical)
 uniform float uSpin;             // v56-2: per-mode differential rotation phase (rad, song-time driven; 0 = static mandala)
 uniform float uHueDrift;         // v56-6: 1 = song-time hue drift on (v54); 0 = pure-spectrum lock
 uniform float uDisc;             // v56-8: medallion inner edge (smoothstep lo); 0.82 = v54
@@ -2130,8 +2132,17 @@ void main(){
   if(uCell > 0.001){
     float aF = abs(F);
     float aFr   = aF * (1.0 + r*2.4);                             // radial-decay compensation -> cells fill the WHOLE disc
-    float K     = (4.0 + uCell*12.0) * (1.0 - uPunch*0.10);       // density; (f) kick momentarily enlarges the tiles
-    float phase = aFr * K + r * 13.0 * uKMul - uFlow*1.6;         // (b) flux FLOW scrolls the bands; uKMul tightens them on intense passages
+    // v75 BASSFORGE/CymaScope DENSITY: |F|-bands + concentric rings + an EXPLICIT ANGULAR HONEYCOMB -> real
+    //   water-cymatics cell tiling (PhD-research: the missing ingredient was angular cell subdivision + a density
+    //   FLOOR). NOTE: v74 has NO single-parameter recovery (K/radK/Mang floors differ from v74 at every uCell); the
+    //   v74 line view is preserved instead by the uCell>0.001 GATE (this whole block is skipped) -> default byte-identical.
+    float K     = (10.0 + uCell*16.0) * (1.0 - uPunch*0.10);      // v75: |F|-band density FLOOR 10 (was 6) -> dense even when quiet; (f) kick momentarily enlarges the tiles
+    float radK  = (12.0 + uCell*8.0) * uKMul;                     // v75: concentric-ring count, floored 12 (was fixed r*17); uKMul tightens on intense passages
+    float Mang  = floor((10.0 + uCell*10.0) * uKMul + 0.5);       // v75: angular cells per ring (~10 floor .. ~38 at peak uCell*uKMul), INTEGER -> kfold-seam-safe (phase continuous across theta=0)
+    float ringId= floor(aFr*K + r*radK);                          // radial band index (for the brick stagger)
+    float aphase= Mang*ang*0.15915494 + 0.5*mod(ringId, 2.0);     // M cells/rev + half-cell BRICK offset on alternating rings -> staggered HEX honeycomb (soap-bubble read, not graph paper)
+    float angMix= smoothstep(0.06, 0.20, r);                      // fade the angular chop IN past the core -> clean center medallion (no sunburst singularity at r->0)
+    float phase = aFr * K + r * radK - uFlow*1.6 + aphase*angMix; // v75: COMBINED field-bands + rings + honeycomb. (b) flux FLOW scrolls; uKMul tightens further on intense passages
     float fb    = fract(phase);
     float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.02;            // v72.1: weaker loudness coupling so the dark nodal lines keep a CONSISTENT bold width through the song (loud passages no longer thin them toward invisible)
     float fwb   = fwidth(phase) + 1e-4;                           // pixel footprint of the banding -> ANTI-ALIAS: SHARP lines, no grain (smooths to flat where sub-pixel instead of aliasing)
@@ -2185,6 +2196,13 @@ void main(){
     col += fullSat * smoothstep(0.80, 0.99, V) * uCellBloom * 0.28;   // #19 gentle bloom (full-V cells already pop; keep small + high threshold)
     col += vec3(0.02,0.012,0.05) * uBgTint;                 // #7 deep indigo ground so jewel colors pop
     vec3 hsvF = cymRgb2hsv(col); hsvF.y = 1.0; col = cymHsv2rgb(hsvF);   // FINAL re-peg S=1.0 -> a fully-saturated color can NEVER be white/pale -> kills the center white-out (laser-safe)
+  }
+  // ===== v75 EMOTION ENGINE — rotate the FINAL hue toward the song's POSITIVE emotion (every color path; uEmoAmt=0 -> off) =====
+  if(uEmoAmt > 0.001){
+    vec3 he = cymRgb2hsv(col);
+    float ed = uEmoHue - he.x; ed -= floor(ed + 0.5);   // shortest signed arc in turns
+    he.x = fract(he.x + uEmoAmt*ed);
+    col = cymHsv2rgb(he);
   }
   col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
@@ -2297,6 +2315,7 @@ let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70
 let _dnaC=0, _cymCEnv=0, _dnaCell=0;   // v71: _dnaC = per-song-normalized + expanded MUSICAL-INTENSITY signal (deterministic, drives geometry complexity); _cymCEnv = its fast-attack/slow-release envelope (amplitude/color); _dnaCell = intensity-driven line->CELL crossfade (delicate lines verse -> filled BassForge mandala at the drop)
 let _dnaLufsB=1, _dnaHcdf=0, _dnaHarmFlow=0, _dnaSpread=0;   // v72 SONG EQUATION (from Song Map v2): perceptual LOUDNESS->brightness, HARMONIC-CHANGE->bloom, TONNETZ-velocity->flow, spectral SPREAD->ring fineness
 let _dnaResolve=0;   // v74 GNOSIS crystallization amount 0..1 (0=fully dynamic v73, 1=held mandala). Pure fn of songT+map (seek-reproducible); re-pegged 0 at top of dnaConduct so a flip-off mid-song leaves no stale bleed.
+let _emoHue=200, _emoSat=82, _emoLight=55, _emoVal=0.6, _emoAro=0.4;   // v75 EMOTION ENGINE: live (seek-snapped) POSITIVE-emotion color bus — biases the figure's hue center + sat/light floors so each song reads its own positive emotion (woven into the Song Equation, always-on under DNA, no toggle).
 function _dnaFFT(re,im){ const n=re.length;
   for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
   for(let len=2;len<=n;len<<=1){ const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
@@ -2378,6 +2397,48 @@ function _gnHue(keyV2, chromaWhole, cenWhole){   // 3 contributions: CoF key hom
   const cenHue = (cenWhole||0)*55;
   const hue = ((keyHue*0.55 + chordHue*0.30*(0.5+0.5*conc) + cenHue) % 360 + 360) % 360;
   return +hue.toFixed(2); }
+// ===== v75 EMOTION ENGINE — positive-emotion taxonomy + deterministic classifier =====
+// Each POSITIVE emotion -> its own color (operator's vision "each color an emotion": love->rose, serenity->sky, joy->gold,
+// awe->violet, hope->spring-green...). HSL hue anchors from the v75 dissertation (EVT/GEMS-grounded); all in safe positive
+// bands (no chartreuse 70-95, no alarm-red); guardHue backstops. LIGHT rides AROUSAL, SAT the emotion+valence (Valdez).
+// LAW 1: negative songs are TRANSMUTED to their nearest positive cousin (never rendered negative). HONEST: these are
+// designed POSITIVE color biases (probabilistic nudges), never a claim the song "is" an emotion. Deterministic pure fn.
+const _EMO_HUE = { joy:48, tenderness:340, wonder:270, peacefulness:200, euphoria:320, gratitude:35,
+                   hope:150, playfulness:25, triumph:45, nostalgia:30, transcendence:250 };
+const guardHue = h => (h>70 && h<95) ? (h<82 ? 48 : 120) : h;   // snap the one reliably-aversive band (olive/chartreuse) to gold/green
+function emoClassify(m, idx){
+  const k     = (cfg.cymDNAv2 && m.keyV2) ? m.keyV2 : m.key;
+  const minor = (k && k.minor) ? 1 : 0;
+  const CH = (m.ts.chromaV2 || m.ts.chroma); let conc=0;
+  { const chr=new Array(12); for(let p=0;p<12;p++) chr[p]=(CH[idx*12+p])||0; conc=_gnConc(chr); }
+  const cen   = Math.max(0, Math.min(1, _dnaFoc));
+  const lu    = (m.ts.lufsST && m.ts.lufsST[idx]===m.ts.lufsST[idx]) ? m.ts.lufsST[idx] : -23;
+  const loud  = Math.max(0, Math.min(1, (Math.max(-32, Math.min(-6, lu)) + 32) / 26));
+  const inten = (m.ts.intensity && m.ts.intensity[idx]===m.ts.intensity[idx]) ? m.ts.intensity[idx] : loud;
+  // AROUSAL (the emotional ENERGY) — octave-FREE + robust: the v71 musical-INTENSITY arc (loudness+flux+entropy+
+  // coverage+centroid, percentile-normalized per song) + loudness + brightness. We deliberately do NOT use raw BPM
+  // (it suffers tempo-octave errors until SE3's beat grid lands).
+  const aro = Math.max(0, Math.min(1, 0.70*inten + 0.18*loud + 0.12*cen));
+  // VALENCE tilt (SOFT) — mode is a WEAK cue (many joyful pop songs are harmonically minor), so lean on brightness +
+  // consonance + arousal with only a light mode tilt. Reflected positive by LAW 1 (transmutation, below).
+  const valRaw = 0.22*(minor ? -1 : 1) + 0.30*(cen*2 - 1) + 0.30*(conc*2 - 1) + 0.18*(aro*2 - 1);
+  const val    = Math.max(0, Math.min(1, 0.5 + 0.5*Math.abs(valRaw)));
+  const vpos   = valRaw >= 0;
+  // ENERGY drives WARM(high)<->COOL(low); valence picks the sub-emotion. A negative song lands on the calmer/cooler
+  // POSITIVE cousin within its OWN energy band — never a negative render (LAW 1).
+  let gems;
+  if      (aro >= 0.60) gems = vpos ? 'joy'        : 'triumph';                                  // high energy -> warm gold
+  else if (aro >= 0.32) gems = vpos ? 'hope'       : 'wonder';                                   // mid -> spring-green / violet
+  else                  gems = vpos ? 'tenderness' : (cen<0.4 ? 'peacefulness' : 'nostalgia');   // calm -> rose / sky / amber
+  const baseH = _EMO_HUE[gems];
+  let hueDeg  = guardHue(((baseH + (aro-0.5)*16) % 360 + 360) % 360);   // emotion anchor + small arousal dither (breathes)
+  const sat   = 78 + 18*val;                       // 78..96 — pure popping laser hues
+  const light = 40 + 22*aro + 4*val;               // 40..66 — arousal-bright; positive floor (never "dark = sad")
+  const anticip = Math.max(0, Math.min(1, _dnaAnticip));
+  const peak    = Math.max(0, Math.min(1, Math.max(_dnaPunch, _dnaHcdf)));   // for the Step-2 frisson loop
+  return { hueDeg, gems, sat:Math.max(60,Math.min(100,sat)), light:Math.max(40,Math.min(66,light)),
+           val:+val.toFixed(3), aro:+aro.toFixed(3), anticip, peak };
+}
 function _gnHarmonic(chromaWhole){       // TRANSPOSITION-SENSITIVE: bind mode k -> a pitch class (fifths) + angular emphasis
   const harm=new Float64Array(CYM_NMODES);
   for(let k=0;k<CYM_NMODES;k++){
@@ -2711,6 +2772,14 @@ function dnaConduct(songT){
   if(m.ts.hcdf){ _dnaHcdf = Math.max(0, Math.min(1, m.ts.hcdf[idx]||0)); }                                                                                  // harmonic-change novelty -> bloom on CHORD changes
   if(m.ts.tonn){ const k=Math.min(idx,5); let d=0; for(let i=0;i<6;i++){ const e=(m.ts.tonn[idx*6+i]||0)-(m.ts.tonn[(idx-k)*6+i]||0); d+=e*e; } _dnaHarmFlow=Math.min(1,Math.sqrt(d)*2.6); }  // Tonnetz VELOCITY -> harmonic-motion flow
   if(m.ts.spread){ _dnaSpread = Math.max(0, Math.min(1, m.ts.spread[idx]||0)); }                                                                            // spectral SPREAD -> ring fineness (timbral axis)
+  // ===== v75 EMOTION ENGINE — derive the song's POSITIVE emotion -> live (seek-snapped) color bus =====
+  // Always-on while a song decodes (no toggle). Color may be live-smoothed (geometry stays a pure fn of map+songT);
+  // seek-snap (like _cymCen) keeps it DETERMINISTIC: same song-time -> same color on replay.
+  { const e = emoClassify(m, idx);
+    const ac = _genSnap ? 1 : (1 - Math.pow(0.92, (typeof _dtf==='number'&&_dtf>0)?_dtf:1));   // instant on seek, ~smooth in playback
+    let dh = ((e.hueDeg - _emoHue + 540) % 360) - 180; _emoHue = ((_emoHue + dh*ac) % 360 + 360) % 360;   // shortest-arc hue EMA
+    _emoSat += (e.sat - _emoSat)*ac; _emoLight += (e.light - _emoLight)*ac;
+    _emoVal = e.val; _emoAro = e.aro; }
 }
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
@@ -3136,8 +3205,15 @@ function drawGLCymatic(tt){
     const _hueN  = ((hueDeg%360)+360)%360;
     g.uniform1f(glU(P,'uHue'),  _hueN);
     _cymBaseHue = _hueN;   // v56-1: stash for the tesseract (same hue family)
-    g.uniform1f(glU(P,'uSat'),  _dnaOn ? (Math.max(80, Math.min(96, 92 - flt*16))*(1-(cfg.cymGnosis?_dnaResolve:0)) + 100*(cfg.cymGnosis?_dnaResolve:0)) : Math.max(50, Math.min(90, 90 - flt*40)));   // v70 DNA: fully-saturated pure hues (operator's hard requirement); v74 GNOSIS: -> full saturation tonic hue at hold
-    g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, _dnaOn ? (38 + _dnaBright*22) : (40 + en*22))));   // v70 DNA: lightness rides the composed loudness arc (was the dead _curLight wire)
+    g.uniform1f(glU(P,'uSat'),  _dnaOn ? (Math.max(80, Math.min(96, 92 - flt*16))*(1-(cfg.cymGnosis?_dnaResolve:0)) + 100*(cfg.cymGnosis?_dnaResolve:0)) : Math.max(50, Math.min(90, 90 - flt*40)));   // v70 DNA: fully-saturated pure hues
+    g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, _dnaOn ? (38 + _dnaBright*22) : (40 + en*22))));   // v70 DNA: lightness rides the composed loudness arc
+    // ===== v75 EMOTION ENGINE — rotate the FINAL figure hue toward the song's POSITIVE emotion =====
+    // Single unified bias point: catches EVERY color path (line pal(), freq-color, water-cell rainbow, gnosis held).
+    // Always-on under DNA (no toggle); amt=0 when no song -> byte-identical to v74. _emoHue is seek-snapped -> deterministic.
+    g.uniform1f(glU(P,'uEmoHue'), ((((_emoHue%360)+360)%360)/360));
+    // GENTLE during the song (preserve the operator's full-spectrum rainbow + shapes + intensity — the "Outside" look),
+    // then crystallize STRONGER toward the pure emotion only at the gnosis held ending (the "completion" moment).
+    g.uniform1f(glU(P,'uEmoAmt'), _dnaOn ? (0.14 + 0.45*(cfg.cymGnosis?_dnaResolve:0)) : 0.0);
     // Phase B: per-mode hue vectors + toggle (cheap; reuses the modal loop). LITE-under-load drops to
     // Phase-A single hue (zero per-pixel atan + zero accumulation via the uFreqColor>0.5 branch).
     g.uniform2fv(glU(P,'uModeHV'), _cymModeHV);
@@ -3457,16 +3533,25 @@ function _cymF(x,y,sym){ const p=_cymKfold(x,y,sym); const r=Math.hypot(p[0],p[1
 // geometry = the v58/v59-rejected trap). Deterministic: pure fn of seek-snapped _cymCoef, cfg.cymCell,
 // and the snapped _cymFlowPh (the same value the shader used THIS frame, set @drawGLCymatic before this runs).
 function _cymPhase(x,y,sym){
-  const p=_cymKfold(x,y,sym); const r=Math.hypot(p[0],p[1]);
+  let p=_cymKfold(x,y,sym);
+  const flow=(typeof _lzUFlow==='number')?_lzUFlow:(((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0)?_cymFlowPh:0);   // match the shader's actual _uFlow (incl. DNA-driven flow)
+  if(flow!==0){ const fs=flow*0.12, cs=Math.cos(fs), sn=Math.sin(fs); p=[cs*p[0]+sn*p[1], -sn*p[0]+cs*p[1]]; }   // v75: MIRROR FRAG_CYMATIC line 2079 — rotate the folded point BEFORE ang (v75 honeycomb makes ang load-bearing: omitting this rotated the laser figure off-screen)
+  const r=Math.hypot(p[0],p[1]);
   if(r>1.0) return -1e9;                                  // outside disc -> below any level >=0 (no false rim contour)
   const ang=Math.atan2(p[1],p[0]); let F=0;
   for(let k=0;k<CYM_NMODES;k++){ const a=_cymCoef[k]; if(a<=0.0005) continue;
     const n=CYM_MODES[k][0], z=CYM_MODES[k][2]; F += a*_cymJlut(n, z*r)*Math.cos(n*ang); }
   const aFr = Math.abs(F)*(1.0 + r*2.4);                  // folded r/ang -> rings inherit kfold symmetry
   const uCell=(typeof _lzCellEff==='number')?_lzCellEff:((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100);   // v71: effective cell (incl. intensity-driven _dnaCell) so the galvo rings appear exactly when the shader's do
-  const K = 4.0 + uCell*12.0;                             // un-punched density (uPunch dropped for determinism)
-  const flow=(typeof _lzUFlow==='number')?_lzUFlow:(((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0)?_cymFlowPh:0);   // match the shader's actual _uFlow (incl. DNA-driven flow)
-  return aFr*K + r*13.0*(typeof _lzKMul==='number'?_lzKMul:1) - flow*1.6;   // v71: uKMul ring-fineness, mirroring FRAG_CYMATIC
+  const kmul=(typeof _lzKMul==='number')?_lzKMul:1;
+  // v75: mirror the BassForge honeycomb phase EXACTLY (uPunch omitted -> deterministic geometry the galvo can trace)
+  const K = 10.0 + uCell*16.0;                            // == shader K floor (no uPunch)
+  const radK = (12.0 + uCell*8.0) * kmul;                 // == shader radial floor
+  const Mang = Math.floor((10.0 + uCell*10.0) * kmul + 0.5);   // == shader angular cells, INTEGER
+  const ringId = Math.floor(aFr*K + r*radK);
+  const aphase = Mang*ang*0.15915494 + 0.5*(ringId % 2);  // M cells/rev + brick offset (mod 2)
+  const _t = Math.max(0, Math.min(1, (r - 0.06)/(0.20 - 0.06))); const angMix = _t*_t*(3 - 2*_t);   // == shader smoothstep(0.06,0.20,r)
+  return aFr*K + r*radK - flow*1.6 + aphase*angMix;       // == FRAG_CYMATIC phase (flow hoisted to top for the line-2079 pre-rotation)
 }
 // Fill an N×N grid in [-1,1] from a sampler; also return min/max (for ring level range).
 function _cymFillGrid(sample,N,sym){
@@ -6314,7 +6399,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v75';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
