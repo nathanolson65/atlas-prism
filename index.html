@@ -721,6 +721,9 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◈ — Lead / melody sync <span class="sub">(v68: bias the figure toward the mid/upper-mid LEAD register so a melodic lead — guitar/horn/synth/vocal — reshapes the mandala, not just the drums+bass; 0 = off)</span></label><input type="range" class="prng" id="setCymLead" min="0" max="100" value="0"></div>
       <div class="row"><label>🧬 DNA Song Decoder <span class="sub">(v69 — the LEAP: pre-scan the WHOLE song once → drive the cymatics from its DNA. Shape follows the spectrum, density + brightness follow the song's structure, drops PUNCH, build-ups anticipate. ONE toggle — turn your other sync sliders down and just flip this on; your presets stay untouched. Needs a streamed/file song, not the YouTube-embed or mic.)</span></label><div class="sw" id="swCymSongDNA"></div></div>
       <div class="row"><label>🧬 — Complexity range <span class="sub">(v71 — how hard musical INTENSITY drives pattern complexity: delicate few-ring verse → dense crisp BassForge-grade mandala at the drop. Needs DNA on. 0 = v70 gentle; 70 = dramatic verse↔drop contrast; 100 = brutal.)</span></label><input type="range" class="prng" id="setCymComplexity" min="0" max="100" value="70"></div>
+      <div class="row"><label>🌀 Gnosis ending <span class="sub">(v74 — after the song resolves (the last drop into its outro, or a wind-down/fade) the figure CRYSTALLIZES into a still, complete mandala — the song's true form held as 'completion'. The kaleidoscope slows and locks over ~8–16s into the whole-song fingerprint, colored by the song's tonic, then breathes once like a singing bowl. Needs Song DNA on. Relentless tracks with no outro stay live.)</span></label><div class="sw" id="swCymGnosis"></div></div>
+      <div class="row"><label>🌀 — Gnosis hold <span class="sub">(how COMPLETE the freeze is: 0 = barely settles, 100 = fully static held mandala. ~60 = a clear arrival that still breathes.)</span></label><input type="range" class="prng" id="setCymGnosisHold" min="0" max="100" value="60"></div>
+      <div class="row"><label>🧬 — Accurate harmony (v2) <span class="sub">(v74 SE1: drive the LIVE figure's shape + color from an 8192-pt bass FFT + parabolic-peak constant-Q decoder — accurate pitch/key/chroma down into the deep bass (to ~30 Hz) + sub-semitone tuning. Needs DNA on. The Gnosis ending always uses this accurate decoder for its per-song fingerprint regardless of this toggle.)</span></label><div class="sw" id="swCymDNAv2"></div></div>
       <div class="row"><label>🌊 — Cell transparency <span class="sub">(v72 — width of the DARK nodal gaps between the colored antinode cells, so the complex cell PATTERN reads clearly instead of a solid rainbow fill. Colors unchanged. 0 = thin gaps (solid) · 12 = subtle distinct lines · 100 = max see-through.)</span></label><input type="range" class="prng" id="setCymCellGap" min="0" max="100" value="12"></div>
       <div class="row"><label>◆ — Mode hold <span class="sub">(de-pop: locks the dominant ring so it stops flickering between near-tied modes)</span></label><div class="sw" id="swCymHyst"></div></div>
       <div class="row"><label>◆ — Smooth fade <span class="sub">(de-pop: modes fade in/out ~300ms instead of popping to dark)</span></label><div class="sw" id="swCymSmooth"></div></div>
@@ -936,6 +939,9 @@ const cfg = Object.assign({
   cymSync:50,          // #4: 0..100 frequency-tracking aggressiveness (50 = v55 default; low = subtle, high = dramatic morph)
   cymLead:0,           // v68 LEAD/MELODY sync: 0..100 bias the mode-focus toward the mid/upper-mid lead register so a melodic lead steers the figure shape (0 = off, byte-identical)
   cymSongDNA:false,    // v69 DNA SONG DECODER: ONE master toggle — pre-scan the WHOLE song -> Song Map -> conduct the cymatics (shape/density/brightness/punch from the song's DNA; composed + anticipatory + reproducible). Default OFF -> presets untouched.
+  cymGnosis:false,     // v74 GNOSIS ENDING: after the song's resolution (last drop -> outro, or a wind-down/fade) the figure CRYSTALLIZES dynamic->static — settles into a held, complete sacred-geometry mandala (the song's whole-song FINGERPRINT, colored by its tonic) = a felt sense of COMPLETION. Static-but-ALIVE (one ~0.04Hz singing-bowl breath). DETERMINISTIC (pure fn of map+songT, seek-reproducible). Needs Song DNA on. Default OFF -> byte-identical to v73.
+  cymGnosisHold:60,    // v74: how COMPLETE the crystallization is — 0 = barely settles (full no-op safety floor), 100 = fully static held mandala. ~60 = a clear arrival that still breathes.
+  cymDNAv2:false,      // v74 SE1: route the LIVE figure onto the 8192-FFT parabolic-peak chromaV2/cenV2/keyV2 (accurate key/chroma incl. deep bass). Default OFF = live figure byte-identical v73. (The Gnosis fingerprint ALWAYS uses the accurate v2 fields, independent of this toggle, so each song's held mandala is distinct.)
   // v59 cymatic redesign — decompress + de-pop + fluidity — ALL inert by default (v58 byte-identical)
   cymHyst:false,       // §1 de-pop: dominant-mode hysteresis latch (no near-tie flips)
   cymSmooth:false,     // §2 de-pop: asymmetric per-mode EMA (fast attack / slow release)
@@ -2290,6 +2296,7 @@ let _dnaFoc=0.4, _dnaBright=1, _dnaDensity=0, _dnaPunch=0, _dnaHue=200, _dnaWarm
 let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70: textural "virtual-slider" levels conducted from the Song Map (so ONE toggle = a full rich show)
 let _dnaC=0, _cymCEnv=0, _dnaCell=0;   // v71: _dnaC = per-song-normalized + expanded MUSICAL-INTENSITY signal (deterministic, drives geometry complexity); _cymCEnv = its fast-attack/slow-release envelope (amplitude/color); _dnaCell = intensity-driven line->CELL crossfade (delicate lines verse -> filled BassForge mandala at the drop)
 let _dnaLufsB=1, _dnaHcdf=0, _dnaHarmFlow=0, _dnaSpread=0;   // v72 SONG EQUATION (from Song Map v2): perceptual LOUDNESS->brightness, HARMONIC-CHANGE->bloom, TONNETZ-velocity->flow, spectral SPREAD->ring fineness
+let _dnaResolve=0;   // v74 GNOSIS crystallization amount 0..1 (0=fully dynamic v73, 1=held mandala). Pure fn of songT+map (seek-reproducible); re-pegged 0 at top of dnaConduct so a flip-off mid-song leaves no stale bleed.
 function _dnaFFT(re,im){ const n=re.length;
   for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
   for(let len=2;len<=n;len<<=1){ const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
@@ -2299,6 +2306,118 @@ function _dnaFFT(re,im){ const n=re.length;
         const ncr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=ncr; } } } }
 const _DNA_KK_MAJ=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
 const _DNA_KK_MIN=[6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+/* ===== SONG DNA SE1 (v74) — 8192-pt bass FFT + parabolic-peak constant-Q front-end =====
+   Single 8192 FFT/frame, parabolic-interpolated spectral PEAKS -> sub-bin Hz -> pitch class (chromaV2)
+   + circular-mean tuning + Hz centroid (cenV2) + Pearson K-S key (keyV2). B=12 log reference only; no dense CQT stored.
+   Verified in Node (design/se1_verify.js, 14/14). Always computed at scan; conductor reads gated by cfg.cymDNAv2. */
+function _se1Peaks(mag, SR, FFTN, fLo, fHi, out){            // parabolic local-max peaks into out{fr,mg,n}
+  const binHz=SR/FFTN, half=mag.length;
+  const kLo=Math.max(2,Math.floor(fLo/binHz)), kHi=Math.min(half-2,Math.ceil(fHi/binHz));
+  let n=0; const fr=out.fr, mg=out.mg, cap=fr.length;
+  for(let k=kLo;k<=kHi;k++){
+    const b=mag[k]; if(b<=0) continue;
+    if(b>=mag[k-1] && b>=mag[k+1] && (b>mag[k-1]||b>mag[k+1])){
+      const a=mag[k-1], c=mag[k+1], denom=(a-2*b+c);
+      const d = denom!==0 ? 0.5*(a-c)/denom : 0;
+      const peakHz=(k+d)*binHz, peakMg=b - 0.25*(a-c)*d;
+      if(n<cap){ fr[n]=peakHz; mg[n]=Math.max(0,peakMg); n++; }
+    }
+  }
+  out.n=n; return out;
+}
+function _se1Tuning(magAvg, SR, FFTN){                       // global ET-grid deviation, semitones [-0.5,0.5)
+  const f0=32.70319566, cap=2048, pk={fr:new Float64Array(cap), mg:new Float64Array(cap), n:0};
+  _se1Peaks(magAvg, SR, FFTN, 55, 2000, pk);
+  let sx=0, sy=0;
+  for(let i=0;i<pk.n;i++){ const m=pk.mg[i]; if(m<=0) continue;
+    const semis=12*Math.log2(pk.fr[i]/f0), dev=semis-Math.round(semis), ph=2*Math.PI*dev;
+    sx+=m*Math.cos(ph); sy+=m*Math.sin(ph); }
+  return (sx===0&&sy===0) ? 0 : Math.atan2(sy,sx)/(2*Math.PI);
+}
+function _se1FoldChroma(pk, tuning, chroma, base, accum){    // peaks -> 12 pitch classes, tuning-shifted ET grid
+  const C0=16.3516, ref=C0*Math.pow(2, tuning/12);
+  for(let i=0;i<pk.n;i++){
+    const fr=pk.fr[i]; if(fr<30||fr>5000) continue;          // 30 Hz floor (NOT v1's 55) — bass SE1 fixes
+    let pc=Math.round(12*Math.log2(fr/ref))%12; if(pc<0)pc+=12;
+    const w=Math.log1p(pk.mg[i]);
+    chroma[base+pc]+=w; if(accum) accum[pc]+=w;
+  }
+}
+function _se1Key(chroma){                                    // Pearson Krumhansl-Schmuckler + confidence
+  let mc=0; for(let p=0;p<12;p++) mc+=chroma[p]; mc/=12;
+  const cc=new Float64Array(12); let cn=0; for(let p=0;p<12;p++){ cc[p]=chroma[p]-mc; cn+=cc[p]*cc[p]; }
+  cn=Math.sqrt(cn)||1e-12;
+  let mMaj=0,mMin=0; for(let p=0;p<12;p++){ mMaj+=_DNA_KK_MAJ[p]; mMin+=_DNA_KK_MIN[p]; } mMaj/=12; mMin/=12;
+  let nMaj=0,nMin=0; for(let p=0;p<12;p++){ nMaj+=(_DNA_KK_MAJ[p]-mMaj)**2; nMin+=(_DNA_KK_MIN[p]-mMin)**2; }
+  nMaj=Math.sqrt(nMaj)||1e-12; nMin=Math.sqrt(nMin)||1e-12;
+  let best=-2, bt=0, bm=0, second=-2;
+  for(let r=0;r<12;r++){ let sj=0,sn=0;
+    for(let p=0;p<12;p++){ const c=cc[(p+r)%12]; sj+=c*(_DNA_KK_MAJ[p]-mMaj); sn+=c*(_DNA_KK_MIN[p]-mMin); }
+    const rj=sj/(cn*nMaj), rn=sn/(cn*nMin);
+    if(rj>best){ second=best; best=rj; bt=r; bm=0; } else if(rj>second) second=rj;
+    if(rn>best){ second=best; best=rn; bt=r; bm=1; } else if(rn>second) second=rn; }
+  return { tonic:bt, minor:bm, hue:(bt*30+(bm?180:0))%360,
+           confidence:+Math.max(0,Math.min(1,best-second)).toFixed(4) };
+}
+// ===== v74 GNOSIS fingerprint v2 — per-song held figure from accurate harmony + whitened register =====
+// _FIFTHS_POS[pc] = circle-of-fifths step (for hue); _FIFTHS_PC[step] = inverse, BINDS mode k -> a pitch class
+// so transposing the song re-lights DIFFERENT modes (the fix for the degenerate identical-mandala collapse).
+const _FIFTHS_POS = [0,7,2,9,4,11,6,1,8,3,10,5];
+const _FIFTHS_PC  = [0,7,2,9,4,11,6,1,8,3,10,5];
+function _gnChordAngle(chromaWhole){    // circular mean angle of the 12-bin chroma (chord identity)
+  let sx=0, sy=0; for(let p=0;p<12;p++){ const a=2*Math.PI*p/12, w=chromaWhole[p]||0; sx+=w*Math.cos(a); sy+=w*Math.sin(a); }
+  return Math.atan2(sy, sx); }
+function _gnConc(chromaWhole){          // chroma CONCENTRATION (resultant length / total) 0..1: tonal-vs-flat
+  let sx=0, sy=0, s=0; for(let p=0;p<12;p++){ const a=2*Math.PI*p/12, w=chromaWhole[p]||0; sx+=w*Math.cos(a); sy+=w*Math.sin(a); s+=w; }
+  return Math.min(1, Math.hypot(sx,sy)/(1e-9+s)); }
+function _gnHue(keyV2, chromaWhole, cenWhole){   // 3 contributions: CoF key home + chord angle + register tilt
+  const cof = _FIFTHS_POS[((keyV2.tonic%12)+12)%12];
+  let keyHue = cof*30 + (keyV2.minor ? 200 : 20);
+  const chordHue = (_gnChordAngle(chromaWhole)/(2*Math.PI))*360;
+  const conc = _gnConc(chromaWhole);
+  const cenHue = (cenWhole||0)*55;
+  const hue = ((keyHue*0.55 + chordHue*0.30*(0.5+0.5*conc) + cenHue) % 360 + 360) % 360;
+  return +hue.toFixed(2); }
+function _gnHarmonic(chromaWhole){       // TRANSPOSITION-SENSITIVE: bind mode k -> a pitch class (fifths) + angular emphasis
+  const harm=new Float64Array(CYM_NMODES);
+  for(let k=0;k<CYM_NMODES;k++){
+    const pc = _FIFTHS_PC[k % 12]; const n = CYM_MODES[k][0];
+    const nW = (n===0?1.0 : n===2?0.95 : n===3?0.9 : n===1?0.7 : n===4?0.6 : 0.5);
+    harm[k] = (chromaWhole[pc]||0) * nW; }
+  let mx=1e-9; for(let k=0;k<CYM_NMODES;k++) if(harm[k]>mx)mx=harm[k];
+  if(mx>0) for(let k=0;k<CYM_NMODES;k++) harm[k]/=mx;
+  return harm; }
+function _gnOneOverF(b, NB){ const f=b/(NB-1); return 1/(1+8*f); }
+function _gnRadial(fpBands){             // WHITENED register deviation -> radial mode emphasis (bass big rings / bright lacework)
+  const NB=fpBands.length; const wht=new Float64Array(NB); let base=0;
+  for(let b=0;b<NB;b++){ wht[b]=Math.max(0,(fpBands[b]||0)/_gnOneOverF(b,NB)); base+=wht[b]; }
+  base/=NB; for(let b=0;b<NB;b++) wht[b]=Math.max(0, wht[b]-base);
+  const rad=new Float64Array(CYM_NMODES);
+  for(let k=0;k<CYM_NMODES;k++){ const b0=Math.floor(k*NB/CYM_NMODES), b1=Math.max(b0+1,Math.floor((k+1)*NB/CYM_NMODES));
+    let s=0,c=0; for(let b=b0;b<b1&&b<NB;b++){ s+=wht[b]; c++; } rad[k]=c?s/c:0; }
+  let mx=1e-9; for(let k=0;k<CYM_NMODES;k++) if(rad[k]>mx)mx=rad[k];
+  if(mx>1e-4) for(let k=0;k<CYM_NMODES;k++) rad[k]/=mx;   // only normalize REAL structure; a featureless spectrum stays ~0 -> _gnCoef ring fallback
+  return rad; }
+function _gnCoef(harm, rad, tonal){      // SHAPE blends by KEY CONFIDENCE (tonal): a clear-key song -> HARMONY petals (so
+  // transposition re-lights modes); a busy low-confidence song (whole-song chroma washes flat) -> the whitened spectral
+  // ENVELOPE (per-song by spectrum, NOT forced n=0 rings — that was the collapse bug). Rings only if the spectrum is also
+  // featureless. CONTRAST-normalized (pow>1, no equalize), top-5, sum 1.2, AFLOOR-pruned.
+  const coef=new Float32Array(CYM_NMODES);
+  let radSum=0; for(let k=0;k<CYM_NMODES;k++) radSum+=rad[k];
+  const flatSpec = radSum < 1e-6;                               // featureless spectrum -> n=0 ring fallback (never blank)
+  for(let k=0;k<CYM_NMODES;k++){ const n=CYM_MODES[k][0];
+    const env       = flatSpec ? (n===0 ? 1.0 : 0.0) : rad[k];  // whitened spectral envelope = the per-song busy-song shape
+    const harmShape = harm[k] * (0.4 + 0.6*(flatSpec ? (n===0?1.0:0.12) : rad[k]));   // harmony petals, register-modulated
+    coef[k] = (1-tonal)*env + tonal*harmShape; }                // low-confidence -> envelope; clear-key -> harmony petals
+  for(let k=0;k<CYM_NMODES;k++) coef[k]=Math.pow(coef[k], 1.7);
+  const ord=Array.from(coef.keys()).sort((a,b)=>coef[b]-coef[a]);
+  for(let r=5;r<CYM_NMODES;r++) coef[ord[r]]=0;
+  for(let pass=0; pass<5; pass++){ let tot=0; for(let k=0;k<CYM_NMODES;k++) tot+=coef[k];
+    if(tot<=1e-6) break; const sc=1.2/tot; let pruned=false;
+    for(let k=0;k<CYM_NMODES;k++){ coef[k]*=sc; if(coef[k]>0 && coef[k]<CYM_AFLOOR){ coef[k]=0; pruned=true; } }
+    if(!pruned) break; }
+  { let any=0; for(let k=0;k<CYM_NMODES;k++) any+=coef[k]; if(any<=1e-6){ coef.fill(0); coef[0]=1.2; } }
+  return coef; }
 function _dnaKey(chroma){ let best=-1e9,bt=0,bm=0; for(let r=0;r<12;r++){ let sj=0,sn=0; for(let p=0;p<12;p++){ const c=chroma[(p+r)%12]; sj+=c*_DNA_KK_MAJ[p]; sn+=c*_DNA_KK_MIN[p]; }
     if(sj>best){best=sj;bt=r;bm=0;} if(sn>best){best=sn;bt=r;bm=1;} } return { tonic:bt, minor:bm, hue:(bt*30 + (bm?180:0))%360 }; }
 function _dnaTempo(flux,hz){ const n=flux.length; if(n<hz*4) return 120;
@@ -2393,9 +2512,118 @@ async function _dnaScan(buf, id){
   const _srt=Array.from(_Iarr).sort((a,b)=>a-b); const _pc=q=>_srt[Math.max(0,Math.min(_srt.length-1,Math.floor(q*(_srt.length-1))))];
   const _lo=_pc(0.05), _sp=Math.max(1e-3,_pc(0.95)-_lo);
   for(let f=0;f<nf;f++) _Iarr[f]=Math.max(0,Math.min(1,(_Iarr[f]-_lo)/_sp));
+  // ===== SE1 (v74): 8192-pt parabolic-peak front-end -> chromaV2/cenV2/keyV2/tuning (additive, always computed) =====
+  const FN8=8192, h8=FN8>>1;
+  const han8=new Float32Array(FN8); for(let i=0;i<FN8;i++) han8[i]=0.5-0.5*Math.cos(2*Math.PI*i/(FN8-1));
+  const re8=new Float32Array(FN8), im8=new Float32Array(FN8), mag8=new Float64Array(h8), magAvg8=new Float64Array(h8);
+  const chromaV2=new Float32Array(nf*12), chromaSumV2=new Float64Array(12), cenV2=new Float32Array(nf);
+  const _pkCap=2048, _pk={fr:new Float64Array(_pkCap), mg:new Float64Array(_pkCap), n:0};
+  for(let f=0; f<nf; f++){ if(id!==_dnaScanId) return null;          // pass 1: magAvg (tuning) + centroid
+    const off=f*hop;
+    for(let i=0;i<FN8;i++){ const j=off+i; const s=(j<N)?(ch1?((ch0[j]+ch1[j])*0.5):ch0[j]):0; re8[i]=s*han8[i]; im8[i]=0; }
+    _dnaFFT(re8,im8);
+    let cnum=0,cden=0;
+    for(let k=1;k<h8;k++){ const mg=Math.hypot(re8[k],im8[k]); cnum+=k*mg; cden+=mg; magAvg8[k]+=mg; }
+    cenV2[f] = cden>1e-9 ? (cnum/h8/cden) : 0;
+    if((f&63)===63) await new Promise(r=>setTimeout(r,0));
+  }
+  const _tuneV2=_se1Tuning(magAvg8,SR,FN8);
+  for(let f=0; f<nf; f++){ if(id!==_dnaScanId) return null;          // pass 2: tuning-aware parabolic-peak chroma
+    const off=f*hop;
+    for(let i=0;i<FN8;i++){ const j=off+i; const s=(j<N)?(ch1?((ch0[j]+ch1[j])*0.5):ch0[j]):0; re8[i]=s*han8[i]; im8[i]=0; }
+    _dnaFFT(re8,im8);
+    for(let k=0;k<h8;k++) mag8[k]=Math.hypot(re8[k],im8[k]);
+    _se1Peaks(mag8,SR,FN8,30,5000,_pk);
+    _se1FoldChroma(_pk,_tuneV2,chromaV2,f*12,chromaSumV2);
+    if((f&63)===63) await new Promise(r=>setTimeout(r,0));
+  }
+  for(let f=0;f<nf;f++){ let s=0; for(let p=0;p<12;p++) s+=chromaV2[f*12+p]; if(s>0) for(let p=0;p<12;p++) chromaV2[f*12+p]/=s; }
+  { let mx=1e-9; for(let f=0;f<nf;f++) if(cenV2[f]>mx)mx=cenV2[f]; if(mx>0) for(let f=0;f<nf;f++) cenV2[f]/=mx; }
+  let _csV2=0; for(let p=0;p<12;p++) _csV2+=chromaSumV2[p];
+  const _csumV2=new Float32Array(12); if(_csV2>0) for(let p=0;p<12;p++) _csumV2[p]=chromaSumV2[p]/_csV2;
+  const keyV2=_se1Key(_csumV2);
   const _secs=_dnaSections(rms,HZ,nf);
-  return { schema:2, hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
-    ts:{rms,cen,flux,bands,chroma:chromaTS,intensity:_Iarr, spread,rolloff,skew,kurt,tonn,hcdf,lufsST}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70+v71 + v2 perceptual axes (shape moments / Tonnetz+HCDF / LUFS) — additive, conductor wiring next phase
+  // --- v74 GNOSIS: single drop scan reused by detection + return (avoid double _dnaDrops) ---
+  const _drops = _dnaDrops(rms,HZ,nf,_secs);
+  // ===== v74 GNOSIS ENDING — deterministic end-of-song RESOLUTION POINT + whole-song FINGERPRINT =====
+  // Pure fn of the already-scanned arcs (no re-FFT). resolveT = songT where crystallization BEGINS; null = no clean
+  // resolution (graceful disable). See design/v74_gnosis_ending.md §A.3.
+  const _gn = (()=>{
+    const dur = buf.duration, nf2 = nf, hz = HZ;
+    const NULL = { resolveT:null, rampDur:0, holdT:null, kind:'none', reason:'', fingerprint:null };
+    if(!dur || dur < 60 || nf2 < hz*30) return Object.assign({}, NULL, {reason:'too short (<60s)'});
+    const I = _Iarr;                                   // per-song percentile-normed musical-intensity arc
+    const meanI = (tA,tB)=>{ let a=Math.max(0,Math.floor(tA*hz)), b=Math.min(nf2,Math.floor(tB*hz)); if(b<=a) return 0;
+      let s=0; for(let i=a;i<b;i++) s+=I[i]; return s/(b-a); };
+    // (1) CLIMAX anchor: last drop, else intensity argmax.
+    let climaxT;
+    if(_drops.length){ climaxT = _drops[_drops.length-1].t; }
+    else { let mx=-1,mi=0; for(let i=0;i<nf2;i++){ if(I[i]>mx){mx=I[i];mi=i;} } climaxT = mi/hz; }
+    const endWinStart = Math.max(climaxT, dur*0.55);   // resolutions only in the end window
+    let resolveT=null, kind='';
+    // (2) RULE 1 — STRUCTURAL OUTRO: first low/decayed step-down section in the end window after the climax.
+    if(_secs && _secs.length){
+      let gHi=0; for(let s=0;s<_secs.length;s++) gHi=Math.max(gHi, _secs[s].energy);
+      const decayThresh = gHi*0.62;
+      for(let s=0;s<_secs.length;s++){ const sec=_secs[s];
+        if(sec.t0 < endWinStart) continue;
+        if(sec.t1 - sec.t0 < 5) continue;
+        const prevE = s>0 ? _secs[s-1].energy : gHi;
+        if(sec.energy < decayThresh && sec.energy <= prevE + 0.02){ resolveT=sec.t0; kind='outro-section'; break; } }
+    }
+    // (3) RULE 2 — ENERGY-ARC DECAY: tail clearly quieter than the body (fade/wind-down/ambient tail).
+    if(resolveT===null){
+      const bodyE = meanI(dur*0.20, dur*0.75), tailE = meanI(dur*0.85, dur);
+      if(bodyE > 0.04 && tailE < bodyE*0.72){
+        const win=Math.round(hz*1.5), lim=Math.floor(endWinStart*hz);
+        for(let i=lim; i<nf2-win; i++){ let s=0; for(let j=0;j<win;j++) s+=I[i+j]; s/=win;
+          if(s < bodyE*0.78){ resolveT=i/hz; kind='energy-decay'; break; } }
+        if(resolveT===null){ resolveT=dur*0.86; kind='energy-decay-fb'; }
+      }
+    }
+    // (4) RULE 3 — graceful DISABLE: ends loud / no outro.
+    if(resolveT===null) return Object.assign({}, NULL, {reason:'no resolution (ends loud / no outro)'});
+    // (5) clamps + ramp.
+    resolveT = Math.max(resolveT, dur*0.60);
+    if(dur - resolveT < 6) return Object.assign({}, NULL, {reason:'resolution too close to end (<6s left)'});
+    const remain = dur - resolveT;
+    let rampDur = Math.min(16, remain - 0.5);   // D4: no hard floor -> holdT <= dur-0.5 always (short outros still fully crystallize)
+    if(rampDur < 5) return Object.assign({}, NULL, {reason:'not enough room for a 5s+ ramp'});
+    const holdT = resolveT + rampDur;
+    // (6) GLOBAL FINGERPRINT v2 — per-song held figure from accurate HARMONY (chromaV2, fifths-bound) + WHITENED
+    //     register. ALWAYS uses the SE1 v2 fields (independent of cfg.cymDNAv2); v1 only if SE1 fields are absent.
+    const _v2 = (typeof chromaV2!=='undefined' && typeof cenV2!=='undefined' && typeof keyV2!=='undefined' && keyV2);
+    const chromaWhole=new Float64Array(12), fpBands=new Float32Array(NB);
+    let wSum=0, cenAcc=0;
+    for(let f=0; f<nf2; f++){                                    // intensity-weighted whole-song aggregates
+      const w = 0.15 + I[f]; wSum += w;
+      const ob=f*NB; for(let b=0;b<NB;b++) fpBands[b]+=(bands[ob+b]||0)*w;
+      const oc=f*12;
+      if(_v2){ for(let p=0;p<12;p++) chromaWhole[p]+=(chromaV2[oc+p]||0)*w; cenAcc += (cenV2[f]||0)*w; }
+      else   { for(let p=0;p<12;p++) chromaWhole[p]+=(chromaTS[oc+p]||0)*w; cenAcc += (cen[f]||0)*w; }
+    }
+    if(wSum>1e-9){ for(let b=0;b<NB;b++) fpBands[b]/=wSum; for(let p=0;p<12;p++) chromaWhole[p]/=wSum; cenAcc/=wSum; }
+    { let s=0; for(let p=0;p<12;p++) s+=chromaWhole[p]; if(s>1e-9) for(let p=0;p<12;p++) chromaWhole[p]/=s; }   // L1 chroma
+    { let mx=1e-9; for(let b=0;b<NB;b++) if(fpBands[b]>mx)mx=fpBands[b]; if(mx>0) for(let b=0;b<NB;b++) fpBands[b]/=mx; }
+    const _fpKey = _v2 ? keyV2 : _dnaKey(chromaSum);
+    const _fpCen = _v2 ? Math.max(0,Math.min(1,cenAcc))
+                       : (function(){ let mx=1e-9; for(let f=0;f<nf2;f++) if(cen[f]>mx)mx=cen[f]; return mx>0?Math.max(0,Math.min(1,cenAcc/mx)):0; })();
+    const _tonal = Math.max(0, Math.min(1, (_fpKey.confidence||0)*6));   // Pearson margin -> tonality gate (flat -> ~0 -> ring fallback)
+    const _chW  = Array.prototype.slice.call(chromaWhole);
+    const harm  = _gnHarmonic(_chW);
+    const rad   = _gnRadial(fpBands);
+    const coef  = _gnCoef(harm, rad, _tonal);                    // the per-song held SHAPE: clear-key -> harmony petals; busy -> whitened spectral envelope
+    const hue   = _gnHue(_fpKey, _chW, _fpCen);                  // per-song held COLOR
+    const foc   = +_fpCen.toFixed(4);
+    let domPc=0,dv=-1; for(let p=0;p<12;p++){ if(_chW[p]>dv){dv=_chW[p];domPc=p;} }   // HUD/debug only
+    const fingerprint = { coef, hue, foc, cen:foc, chroma:_chW, domPc, tonal:+_tonal.toFixed(4),
+                          key:{tonic:_fpKey.tonic,minor:_fpKey.minor}, v2:!!_v2 };
+    return { resolveT:+resolveT.toFixed(3), rampDur:+rampDur.toFixed(3), holdT:+holdT.toFixed(3), kind, reason:'', fingerprint };
+  })();
+  return { schema:3, hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
+    keyV2, tuning:_tuneV2,                                                          // SE1: Pearson key + global tuning
+    ts:{rms,cen,flux,bands,chroma:chromaTS,intensity:_Iarr, spread,rolloff,skew,kurt,tonn,hcdf,lufsST, chromaV2, cenV2},
+    sections:_secs, drops:_drops, gnosis:_gn }; }   // v70+v71 + v2 perceptual axes + SE1 8192 front-end + v74 GNOSIS (additive)
 // Only 'track' (decoded buffer) + 'stream' (downloadable URL) carry scannable PCM. demo (live synth),
 // mic, yt (IFrame), none/loading -> NO key. A keyless source is NEVER scanned, and a FAILED attempt
 // LATCHES its key (via _dnaErr in the guard) so it never retries -> this is what kills the toast-spam loop.
@@ -2418,13 +2646,23 @@ async function dnaEnsureScan(){
   const map=await _dnaScan(buf,id);
   if(id!==_dnaScanId) return;
   _dnaScanning=false; _dnaMap=map;
-  if(map){ try{ if(typeof toast==='function') toast('🧬 DNA ready · '+map.bpm+' BPM · '+map.sections.length+' sections · '+map.drops.length+' drops'); }catch(_){} }
+  if(map){ try{ if(typeof toast==='function') toast('🧬 DNA ready · '+map.bpm+' BPM · '+map.sections.length+' sections · '+map.drops.length+' drops'
+      + (map.gnosis && map.gnosis.resolveT!=null ? ' · 🌀 gnosis @'+map.gnosis.resolveT.toFixed(1)+'s' : (cfg.cymGnosis?' · gnosis off('+(map.gnosis?map.gnosis.reason:'?')+')':''))); }catch(_){} }
 }
 function dnaConduct(songT){
   if(!_dnaMap) return;
+  // ===== v74 GNOSIS: deterministic crystallization amount (pure fn of songT + baked map; no live audio) =====
+  _dnaResolve = 0;   // re-peg each frame -> a v1/v2 map without .gnosis (or gnosis.resolveT===null) stays v73-identical
+  if(cfg.cymGnosis && _dnaMap.gnosis && _dnaMap.gnosis.resolveT!=null){
+    const g=_dnaMap.gnosis, t0=g.resolveT, t1=g.resolveT+g.rampDur;
+    let u=(songT-t0)/Math.max(1e-3,(t1-t0)); u = u<=0?0 : u>=1?1 : u*u*(3-2*u);   // smoothstep, seek-reproducible
+    const hold=(typeof cfg.cymGnosisHold==='number'?cfg.cymGnosisHold:60)/100;     // hold dials HOW complete the freeze is
+    _dnaResolve = u*hold;
+  }
   _dnaLufsB=1; _dnaHcdf=0; _dnaHarmFlow=0; _dnaSpread=0;   // v72: re-peg defaults each frame so a v1/partial map (missing v2 ts fields) = byte-identical to v71 (no stale bleed across songs)
   const m=_dnaMap, NB=m.nb||24, idx=Math.max(0,Math.min(m.n-1, Math.floor(songT*m.hz)));
-  const rms=m.ts.rms[idx]||0, cen=m.ts.cen[idx]||0.4, flux=m.ts.flux[idx]||0;
+  const rms=m.ts.rms[idx]||0, flux=m.ts.flux[idx]||0;
+  const cen = (cfg.cymDNAv2 && m.ts.cenV2) ? (m.ts.cenV2[idx]||0.4) : (m.ts.cen[idx]||0.4);   // SE1: 8192 bass-resolved centroid
   // band groups from the pre-scanned spectrum (bands are normalized 0..1) — deterministic per songT
   const B=m.ts.bands, o=idx*NB; let lmid=0,mid=0,high=0,hat=0;
   for(let b=4;b<9 &&b<NB;b++) lmid+=B[o+b]||0;  lmid/=5;
@@ -2440,8 +2678,11 @@ function dnaConduct(songT){
   _dnaFoc    = Math.max(0,Math.min(1, cen*0.6 + high*0.25 + 0.12 + antic*0.18));   // shape: centroid + treble lacework, builds into drops
   _dnaBright = Math.max(0,Math.min(1.6, 0.5 + secE*0.55 + rms*0.25 + antic*0.22 + punch*0.45));
   _dnaDensity= Math.max(0,Math.min(1, secE*0.55 + antic*0.45 + punch*0.5 + high*0.2));
-  let dp=0,dv=0; for(let p=0;p<12;p++){ const c=m.ts.chroma[idx*12+p]||0; if(c>dv){dv=c;dp=p;} }
-  _dnaHue=(m.key.hue + dp*6)%360; _dnaWarm=m.key.minor?1:0;
+  const _useV2 = cfg.cymDNAv2 && m.ts.chromaV2 && m.keyV2;                   // SE1 v2 reads (default-inert if absent)
+  const _chr = _useV2 ? m.ts.chromaV2 : m.ts.chroma;
+  const _key = _useV2 ? m.keyV2 : m.key;
+  let dp=0,dv=0; for(let p=0;p<12;p++){ const c=_chr[idx*12+p]||0; if(c>dv){dv=c;dp=p;} }
+  _dnaHue=(_key.hue + dp*6)%360; _dnaWarm=_key.minor?1:0;
   // ----- TEXTURAL virtual-slider LEVELS (0..1) — auto-raise the proven sync axes so ONE toggle = a rich, alive
   //       figure (the live envelopes still supply micro-detail; these set the floor). All AMP/color class. -----
   _dnaCrispL = Math.max(0,Math.min(1, 0.22 + flux*0.6 + high*0.3 + antic*0.3));    // line definition: onset flux + treble + build tension
@@ -2462,6 +2703,9 @@ function dnaConduct(songT){
   // v71: intensity also crossfades LINE -> filled CELL (the BassForge plate). Verse = delicate nodal lines;
   //      drop = dense iridescent antinode cells. smoothstep(0.45,0.92) so cells only bloom in the upper range.
   { const t=Math.max(0,Math.min(1,(_dnaC-0.45)/0.47)); _dnaCell = (cfg.cymComplexity>0) ? t*t*(3-2*t) : 0; }
+  // v74 D1 NOTE: operator APPROVED the dense water-cell held look this session ("this gnosis is perfect"). We do NOT
+  // fade cells to delicate lines (that would change what they signed off on). Per-song distinctiveness instead comes
+  // from the held fingerprint COEF (different modes -> different cell pattern) + HUE — distinct figure WITHIN the cell style.
   // ===== v72 SONG EQUATION — perceptual + harmonic-motion drivers (Song Map v2; deterministic; default-inert if absent) =====
   if(m.ts.lufsST){ const lu=m.ts.lufsST[idx]; if(lu===lu) _dnaLufsB = Math.max(0.62, Math.min(1.30, 0.7 + (Math.max(-32,Math.min(-6,lu))+32)/26*0.6)); }  // perceptual loudness -> brightness mult (quiet-but-bright reads right; not energy-fooled)
   if(m.ts.hcdf){ _dnaHcdf = Math.max(0, Math.min(1, m.ts.hcdf[idx]||0)); }                                                                                  // harmonic-change novelty -> bloom on CHORD changes
@@ -2493,7 +2737,11 @@ function buildCymCoef(){
   const _lead=(typeof cfg.cymLead==='number'?cfg.cymLead:0)/100;
   if(_lead>0){ let ln=0,ld=0; const b1=Math.min(18,NB-1); for(let b=8;b<=b1;b++){ const ce=Math.max(0,(fBands[b]||0)-mn); const w=ce*ce; ln+=b*w; ld+=w; }
     if(ld>1e-6){ const cenLead=(ln/ld)/(NB-1); cenInst = cenInst*(1-_lead*0.7) + cenLead*(_lead*0.7); } }
-  if(cfg.cymSongDNA && _dnaMap) cenInst = _dnaFoc;     // v69 DNA: the figure's SHAPE follows the song's pre-scanned spectral arc (composed + anticipatory)
+  if(cfg.cymSongDNA && _dnaMap){
+    cenInst = _dnaFoc;                                  // v69 DNA: live spectral-arc focus
+    if(_dnaResolve>0 && _dnaMap.gnosis && _dnaMap.gnosis.fingerprint)
+      cenInst = cenInst*(1-_dnaResolve) + _dnaMap.gnosis.fingerprint.foc*_dnaResolve;   // v74 GNOSIS: ease focus -> whole-song focus
+  }
   if(_genSnap){                                     // snap focus + ALL §4/§5 state on seek/restart (no drift-in)
     _cymCen = cenInst; _cymPeak = bP; _cymCenLo = _cymCen; _cymCenHi = _cymCen; _cymBassDom = 0;
   } else {
@@ -2552,6 +2800,13 @@ function buildCymCoef(){
     v = Math.tanh(v * 2.6);
     _cymRaw[k] = v < CYM_AFLOOR ? 0 : v;
   }
+  // ===== v74 GNOSIS v2: crystallize _cymRaw toward the per-song held fingerprint COEF (the LERP that makes coef
+  //       RENDER — D3 fix). At _dnaResolve->1, _cymRaw becomes EXACTLY fingerprint.coef (top-5, sum~1.2, AFLOOR-
+  //       pruned); the downstream top-K/soft-gate/1.35-density (all gnosis-aware) keep it crisp + white-out-safe. =====
+  if(cfg.cymGnosis && cfg.cymSongDNA && _dnaMap && _dnaResolve>0 && _dnaMap.gnosis && _dnaMap.gnosis.fingerprint){
+    const fc=_dnaMap.gnosis.fingerprint.coef;
+    if(fc){ for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] = _cymRaw[k]*(1-_dnaResolve) + (fc[k]||0)*_dnaResolve; }
+  }
   // 1b) resting figure ONLY in TRUE silence (so the live spectrum, not a fixed ring, drives the figure);
   //     v56-9: cfg.cymRest picks the calm-silence shape (0=ring 1=flower 2=concentric rings).
   const _rms = (typeof audioRMS==='number') ? audioRMS : 0;
@@ -2607,6 +2862,7 @@ function buildCymCoef(){
     //      crisp budget). Past 60%, the remaining dynamic range is spent on FINER single modes (focus order + radial-K
     //      + symmetry below) which each stay a crisp eigenfunction — NOT more overlapping fields (the anti-mush rule).
     kDraw = 3 + Math.round(Math.min(_dnaC,0.6)/0.6 * 4);    // 3..7
+    if(_dnaResolve>0) kDraw = Math.round(kDraw*(1-_dnaResolve) + 5*_dnaResolve);   // v74 GNOSIS: settle to a crisp 5-mode mandala
   } else if(en > 0.7) kDraw += 1;
   // v56-3: beat-synced mode bloom — ignite extra modes on a beat boundary with high energy/kick, then
   // decay. Bound is kDraw=Math.min(CYM_NMODES,kDraw) below + the shader's k>=uNModes break. Decay uses
@@ -2651,7 +2907,9 @@ function buildCymCoef(){
   let tot=0; for(let k=0;k<CYM_NMODES;k++) tot += _cymRaw[k];
   // v71: total contour density tracks musical intensity (0.55x verse .. 2.0x drop) instead of the constant 1.2 that
   // FLATTENED the dynamic range (the #1 reason verse and drop looked the same). Bounded -> wide swing, never unbounded mush.
-  if(tot > 1e-4){ const sc = (_cxK ? (0.55 + 1.45*_dnaC) : 1.2)/tot; for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
+  if(tot > 1e-4){ let sc = (_cxK ? (0.55 + 1.45*_dnaC) : 1.2)/tot;
+    if(cfg.cymGnosis && _dnaResolve>0) sc = sc*(1-_dnaResolve) + (1.35/tot)*_dnaResolve;   // v74 GNOSIS: held figure = steady, full, BOUNDED density (anti-flicker, anti-mush). D2: cfg.cymGnosis guard so a stale _dnaResolve (gnosis-on->DNA-off) can't corrupt the plain figure.
+    for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
   // 4) EMA smoothing — snap ONCE on seek/restart/seed-change then smooth; _dtf -> frame-rate independent.
   if(_genSnap){
     for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] = _cymRaw[k];
@@ -2704,6 +2962,7 @@ function drawGLCymatic(tt){
     const _wScale = Math.min(1, (sym-1)/4);                                          // low folds breathe less (0 at sym=1)
     _uSymWobble = Math.sin(songT*0.031+0.7)*0.6*_sb*_wScale;                         // sub-integer petal breath
   }
+  if(cfg.cymGnosis && _dnaResolve>0){ _uSymBreath*=(1-_dnaResolve); _uSymWobble*=(1-_dnaResolve); }   // v74 GNOSIS: lock the mirror axis (no sub-integer breath in the held figure)
   // mode-count lever: LITE renders fewer modes; drops further when the LITE governor lowers dQ.
   let nModes = cymModeCap();   // phone baseline 10, 8 under load (hoisted so buildCymCoef can clamp foc to this window)
   // Phase D: intensity + live energy bloom the body (more active modes on the drop), CLAMPED to the
@@ -2759,6 +3018,14 @@ function drawGLCymatic(tt){
   if(cfg.cymSongDNA && _dnaMap){                                    // v69 DNA: drops PUNCH + composed BRIGHTNESS, independent of the cymPunch/brightness sliders
     const dP=_dnaPunch*(cfg.refract?0.6:1); if(dP>_uPunch){ _uPunch=dP; scale*=(1-_dnaPunch*0.12); }
     _curLight = Math.max(20, Math.min(94, 24 + _dnaBright*46));
+    if(_dnaResolve>0){ _uPunch *= (1-_dnaResolve);                  // v74 GNOSIS: no transient expansion once crystallized
+      _curLight = _curLight*(1-_dnaResolve) + 60*_dnaResolve; }     // steady held luminosity
+  }
+  // ===== v74 GNOSIS — STATIC BUT ALIVE: one slow deterministic breath on the held figure (singing-bowl decay) =====
+  // ~0.04Hz (period ~25s), +-3% scale. PURE songT LFO -> seek-reproducible (laser-safe). Fades IN with resolve.
+  if(cfg.cymGnosis && _dnaResolve>0){
+    const breath = Math.sin(songT*0.25) * 0.03 * _dnaResolve;      // smaller scale = larger figure (matches the punch convention)
+    scale *= (1 - breath);
   }
   // ===== v60 FULL-SONG-SYNC drivers — each owns ONE orthogonal visual axis; all snap-reset / deterministic =====
   const _refAtt = cfg.refract ? 0.6 : 1.0;
@@ -2766,6 +3033,7 @@ function drawGLCymatic(tt){
   //      the raw deterministic _dnaC). ~40ms attack = the drop SLAMS into full intensity; ~0.5s release = it exhales back.
   { const _tgt=_cxD?_dnaC:0, _dt=(typeof _dtf==='number'&&_dtf>0)?_dtf:1;
     if(_snap0) _cymCEnv=_tgt; else _cymCEnv += (_tgt-_cymCEnv)*(1 - Math.pow(_tgt>_cymCEnv?0.04:0.90, _dt)); }
+  if(cfg.cymGnosis && _dnaResolve>0) _cymCEnv *= (1-_dnaResolve);       // v74 GNOSIS: complexity reactivity fades -> stable held figure
   // (b) spectral FLUX -> deterministic FLOW phase. Re-seeded to closed-form songT*base on seek; flux only scales the rate.
   _cymFluxS = cymEMA(_cymFluxS, (typeof Q!=='undefined'&&Q&&Q.flux===Q.flux)?Q.flux:0, 0.85, _snap0);
   { const dT=Math.max(0,Math.min(0.1, songT-_cymFlowLastT)); _cymFlowLastT=songT;
@@ -2773,8 +3041,11 @@ function drawGLCymatic(tt){
     const _dnaR=(cfg.cymSongDNA&&_dnaMap)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
     const _cxR=_cxD?_dnaC*0.55:0;                             // v71: intensity accelerates rotation into the drop (deterministic raw _dnaC)
     const _hmR=(cfg.cymSongDNA&&_dnaMap)?_dnaHarmFlow*0.6:0;   // v72: TONNETZ harmonic motion -> flow (static harmony = still figure; moving chords = it flows; deterministic)
-    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR + _cxR + _hmR); }
-  const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap)) ? _cymFlowPh : 0;
+    const _gR = (cfg.cymGnosis ? _dnaResolve : 0);                                  // v74 GNOSIS freeze amount
+    const _flowRate = (0.35 + _cymFluxS*flowGain + _dnaR + _cxR + _hmR) * (1 - _gR);
+    if(_snap0) _cymFlowPh = songT*0.35*(1-_gR); else _cymFlowPh += dT*_flowRate; }
+  const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap))
+    ? (_cymFlowPh + (cfg.cymGnosis?_dnaResolve:0)*0.30*Math.sin(songT*0.25)) : 0;   // v74: ~0.04Hz singing-bowl breath (pure songT LFO)
   // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
   _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
   _cymGlow   = cymEMA(_cymGlow,   (typeof harmEnv==='number'?harmEnv:0),   0.92, _snap0);
@@ -2794,6 +3065,12 @@ function drawGLCymatic(tt){
   if(_dnaOn){ _uCrisp = Math.max(_uCrisp, _dnaCrispL*0.65); _uGlow = Math.max(_uGlow, _dnaGlowL*0.55); _uHat = Math.max(_uHat, _dnaHatL*0.55); }
   if(_cxD){ _uCrisp = Math.max(_uCrisp, Math.min(0.55, 0.30 + 0.55*_cymCEnv)); _uGlow = Math.max(_uGlow, 0.22 + 0.42*_cymCEnv); }   // v71: denser = SHARPER + brighter; CAP crisp at 0.55 so cell-band dark gaps NEVER close (>0.83 would solid-fill -> the rejected v50 mush)
   if(_dnaOn && _dnaHcdf>0.25) _uGlow = Math.max(_uGlow, _dnaHcdf*0.55);   // v72: HARMONIC-CHANGE bloom — the figure flares on chord changes (HCDF novelty), not just on beats
+  if(cfg.cymGnosis && _dnaResolve>0){   // v74 GNOSIS: ease the twitchy live envelopes toward calm steady values (never to 0 -> lines stay sharp)
+    const R=_dnaResolve, K=1-R;
+    _uCrisp = _uCrisp*K + 0.42*R;     // steady crisp line definition (< 0.55 cap -> no solid-fill mush)
+    _uGlow  = _uGlow *K + 0.34*R;     // steady luminous halo
+    _uHat   = _uHat *K;               // rim sparkle off (no hi-hat in a held still)
+  }
   _uGlow *= (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
   let _uBright = 1.0;
   if((typeof cfg.cymBright==='number'?cfg.cymBright:0)>0){
@@ -2805,7 +3082,10 @@ function drawGLCymatic(tt){
     const _bpm=(typeof currentBPM==='number'&&currentBPM>40&&currentBPM<210)?currentBPM:(_dnaMap.bpm||124);
     const _bph=(songT*(_bpm/60))%1.0;
     const _bb = Math.min(1.4, Math.max(0.62, (0.65 + _dnaBright*0.45) * _dnaLufsB));   // v72: K-weighted LUFS modulates the composed arc -> PERCEPTUAL brightness (quiet-but-bright reads bright); clamped to the proven 1.4 ceiling
-    _uBright = Math.max(_uBright, _bb * (0.92+0.08*Math.cos(_bph*6.2832)) * _refAtt);
+    const _gRb = (cfg.cymGnosis ? _dnaResolve : 0);
+    const _beatR = (0.92+0.08*Math.cos(_bph*6.2832))*(1-_gRb) + 1.0*_gRb;   // v74: beat-breath -> off at hold
+    const _bbR   = _bb*(1-_gRb) + 1.02*_gRb;                                 // v74: settle to a steady gentle glow
+    _uBright = Math.max(_uBright, _bbR * _beatR * _refAtt);
   }
   // (e) ping accent (reuse the snap-reset _cymPing buffer) -> WHICH ring flashes (radius from its Bessel zero)
   let _pmI=-1,_pmV=0; for(let k=0;k<CYM_NMODES;k++){ if(_cymPing[k]>_pmV){_pmV=_cymPing[k];_pmI=k;} }
@@ -2845,12 +3125,18 @@ function drawGLCymatic(tt){
     // v56-4: route the body base hue through the active palette band (Spectrum/passthrough = v54).
     if(cfg.cymPalette && typeof paletteHue==='function'){ const _pi=_palIdx, _ho=_palHueOff; _palIdx=cfg.palette; _palHueOff=0; base=paletteHue(base); _palIdx=_pi; _palHueOff=_ho; }
     // v56-6: pure-spectrum locks hue to the spectrum (drop the song-time drift term).
-    const _drift = cfg.cymPureSpectrum ? 0 : songT*0.6;
-    const hueDeg = (base + (cen-0.5)*40 + _drift) % 360;
+    const _gRh = (cfg.cymGnosis ? _dnaResolve : 0);
+    const _drift = (cfg.cymPureSpectrum ? 0 : songT*0.6) * (1 - _gRh);
+    let hueDeg = (base + (cen-0.5)*40*(1-_gRh) + _drift) % 360;
+    if(_dnaOn && _gRh>0 && _dnaMap.gnosis && _dnaMap.gnosis.fingerprint){
+      const held=((_dnaMap.gnosis.fingerprint.hue%360)+360)%360, live=((hueDeg%360)+360)%360;
+      let d=held-live; if(d>180)d-=360; if(d<-180)d+=360;   // shortest-arc (no hue wraparound spin)
+      hueDeg = ((live + d*_gRh)%360+360)%360;
+    }
     const _hueN  = ((hueDeg%360)+360)%360;
     g.uniform1f(glU(P,'uHue'),  _hueN);
     _cymBaseHue = _hueN;   // v56-1: stash for the tesseract (same hue family)
-    g.uniform1f(glU(P,'uSat'),  _dnaOn ? Math.max(80, Math.min(96, 92 - flt*16)) : Math.max(50, Math.min(90, 90 - flt*40)));   // v70 DNA: fully-saturated pure hues (operator's hard requirement)
+    g.uniform1f(glU(P,'uSat'),  _dnaOn ? (Math.max(80, Math.min(96, 92 - flt*16))*(1-(cfg.cymGnosis?_dnaResolve:0)) + 100*(cfg.cymGnosis?_dnaResolve:0)) : Math.max(50, Math.min(90, 90 - flt*40)));   // v70 DNA: fully-saturated pure hues (operator's hard requirement); v74 GNOSIS: -> full saturation tonic hue at hold
     g.uniform1f(glU(P,'uLight'),Math.max(34, Math.min(66, _dnaOn ? (38 + _dnaBright*22) : (40 + en*22))));   // v70 DNA: lightness rides the composed loudness arc (was the dead _curLight wire)
     // Phase B: per-mode hue vectors + toggle (cheap; reuses the modal loop). LITE-under-load drops to
     // Phase-A single hue (zero per-pixel atan + zero accumulation via the uFreqColor>0.5 branch).
@@ -5765,7 +6051,10 @@ bindSw('swCymFuse', 'cymFuse', () => { _tssSnapSeen = null; });   // re-arm the 
 bindRange('setCymPunch', 'cymPunch', () => { _cymPunchEnv = 0; });
 bindRange('setCymSync', 'cymSync');
 bindRange('setCymLead', 'cymLead');
-bindSw('swCymSongDNA', 'cymSongDNA', on => { if(on){ if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } else { _dnaMap=null; _dnaScanId++; _dnaScanning=false; _dnaSrcKey=''; _dnaErr=''; } });
+bindSw('swCymSongDNA', 'cymSongDNA', on => { if(on){ if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } else { _dnaMap=null; _dnaScanId++; _dnaScanning=false; _dnaSrcKey=''; _dnaErr=''; _dnaResolve=0; } });   // D2: clear stale resolve when DNA off
+bindSw('swCymGnosis', 'cymGnosis');   // v74: _dnaResolve recomputed each frame from songT -> flips in instantly, no rescan/state reset
+bindRange('setCymGnosisHold', 'cymGnosisHold');
+bindSw('swCymDNAv2', 'cymDNAv2', on => { if(on && cfg.cymSongDNA && _dnaMap && !(_dnaMap.ts && _dnaMap.ts.chromaV2)){ _dnaMap=null; _dnaSrcKey=''; _dnaScanId++; _dnaScanning=false; _dnaErr=''; if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } });   // SE1: re-scan only if an existing map predates SE1
 // v59 cymatic redesign controls — de-pop (§1-3) + decompress (§4-5) + fluidity (§6-7)
 bindSw('swCymHyst', 'cymHyst', () => { _cymDom = -1; _cymDomHold = 0; });
 bindSw('swCymSmooth', 'cymSmooth');
@@ -5956,9 +6245,9 @@ window.addEventListener('offline', () => { updateOnline(); toast('Offline — se
 function applyCfgToUI(){
   document.body.classList.toggle('big', cfg.big);
   document.body.classList.toggle('reduce', cfg.reduce);
-  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync'],['setCymLead','cymLead'],['setCymScanCap','cymScanCap'],['setCymLaserPower','cymLaserPower']]
+  [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync'],['setCymLead','cymLead'],['setCymScanCap','cymScanCap'],['setCymLaserPower','cymLaserPower'],['setCymGnosisHold','cymGnosisHold']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymSongDNA','cymSongDNA'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymSongDNA','cymSongDNA'],['swCymGnosis','cymGnosis'],['swCymDNAv2','cymDNAv2'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic';
@@ -6025,7 +6314,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
