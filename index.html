@@ -720,6 +720,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◈ — Sync sensitivity <span class="sub">(how hard the figure tracks frequency: low = subtle, high = dramatic morphing; 50 = default)</span></label><input type="range" class="prng" id="setCymSync" min="0" max="100" value="50"></div>
       <div class="row"><label>◈ — Lead / melody sync <span class="sub">(v68: bias the figure toward the mid/upper-mid LEAD register so a melodic lead — guitar/horn/synth/vocal — reshapes the mandala, not just the drums+bass; 0 = off)</span></label><input type="range" class="prng" id="setCymLead" min="0" max="100" value="0"></div>
       <div class="row"><label>🧬 DNA Song Decoder <span class="sub">(v69 — the LEAP: pre-scan the WHOLE song once → drive the cymatics from its DNA. Shape follows the spectrum, density + brightness follow the song's structure, drops PUNCH, build-ups anticipate. ONE toggle — turn your other sync sliders down and just flip this on; your presets stay untouched. Needs a streamed/file song, not the YouTube-embed or mic.)</span></label><div class="sw" id="swCymSongDNA"></div></div>
+      <div class="row"><label>🧬 — Complexity range <span class="sub">(v71 — how hard musical INTENSITY drives pattern complexity: delicate few-ring verse → dense crisp BassForge-grade mandala at the drop. Needs DNA on. 0 = v70 gentle; 70 = dramatic verse↔drop contrast; 100 = brutal.)</span></label><input type="range" class="prng" id="setCymComplexity" min="0" max="100" value="70"></div>
       <div class="row"><label>◆ — Mode hold <span class="sub">(de-pop: locks the dominant ring so it stops flickering between near-tied modes)</span></label><div class="sw" id="swCymHyst"></div></div>
       <div class="row"><label>◆ — Smooth fade <span class="sub">(de-pop: modes fade in/out ~300ms instead of popping to dark)</span></label><div class="sw" id="swCymSmooth"></div></div>
       <div class="row"><label>◆ — Soft gate <span class="sub">(de-pop: boundary modes feather in/out instead of a hard cutoff — keeps clean negative space)</span></label><div class="sw" id="swCymSoftGate"></div></div>
@@ -910,6 +911,7 @@ const cfg = Object.assign({
   cymFreqColor:true,   // Cymatic Phase B: paint the figure by its own spectrum (per-mode baked hue, circular-mean dominant)
   cymBrain:false,      // Cymatic Phase C: brain-scan connectogram overlay (12 chroma nodes + coherence edges) — opt-in
   cymIntensity:100,    // Cymatic Phase D: 0..100 fuses body mode-count + brain edge-count/brightness; 100 = full medallion (=v53), lower = delicate
+  cymComplexity:70,    // v71 WIDE-DYNAMIC-RANGE: how aggressively musical intensity (per-song-normalized + expanded) drives pattern COMPLEXITY (mode count/focus order/ring fineness/symmetry/density). Engages only with the DNA decoder ON. 0 = v70 behavior; 70 = delicate verse -> dense crisp BassForge drop.
   // v56 cymatic organism extensions — ALL inert by default (v55 byte-identical out of the box)
   cymTesseract:false,  // v56-1: overlay a rotating 4D hypercube (16 verts/32 edges) framing the field
   cymTessSpin:true,    // v56-1: true = dynamic 4D rotation (bass->4D morph, treble->3D spin); false = frozen pose
@@ -1970,6 +1972,7 @@ uniform float uPunch;            // v58 #4: 0..1 transient kick punch — bright
 uniform float uSymBreath;        // v59 §6: kfold mirror-axis rotation (rad). 0 = frozen integer symmetry (v58)
 uniform float uSymWobble;        // v59 §6: fractional kfold-order delta. 0 = v58
 uniform float uCell;             // v60 🌊: antinode-cell water-cymatics fill mix (0 = nodal-LINE view; 1 = bright filled CELLS, dark F=0 boundaries)
+uniform float uKMul;             // v71: radial ring-fineness multiplier (1 = base; >1 = finer concentric bands at high musical intensity)
 // v60 FULL-SONG-SYNC + CymaScope uniforms (all 0 / neutral by default -> cymCell=0 byte-identical)
 uniform float uFlow;     // b: deterministic flux flow phase
 uniform float uCrisp;    // c: perc -> edge crispness
@@ -2119,7 +2122,7 @@ void main(){
     float aF = abs(F);
     float aFr   = aF * (1.0 + r*2.4);                             // radial-decay compensation -> cells fill the WHOLE disc
     float K     = (4.0 + uCell*12.0) * (1.0 - uPunch*0.10);       // density; (f) kick momentarily enlarges the tiles
-    float phase = aFr * K + r * 13.0 - uFlow*1.6;                 // (b) flux FLOW scrolls the concentric bands outward
+    float phase = aFr * K + r * 13.0 * uKMul - uFlow*1.6;         // (b) flux FLOW scrolls the bands; uKMul tightens them on intense passages
     float fb    = fract(phase);
     float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.06;            // #13 static + (c) perc -> sharper dark boundary
     float fwb   = fwidth(phase) + 1e-4;                           // pixel footprint of the banding -> ANTI-ALIAS: SHARP lines, no grain (smooths to flat where sub-pixel instead of aliasing)
@@ -2129,7 +2132,7 @@ void main(){
     float cell  = band * core * vign;
     cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
     cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
-    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0 - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp((0.42-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp, no grain)
+    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp((0.42-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp, no grain)
     float men  = max(0.0, (1.0-smoothstep(0.30,0.40,abs(fb-0.5))) - (1.0-smoothstep(0.40,0.48,abs(fb-0.5)))) * core * vign;   // #14 meniscus rim
     float halo = (1.0 - smoothstep(0.18, 0.34, abs(fb-0.5))) * core * vign;                                                   // (d) harm glow skirt
     float ping = (1.0 - smoothstep(0.0, 0.10, abs(r - uPingR))) * uPingA * 0.5;                                               // (e) which ring flashes
@@ -2261,6 +2264,7 @@ let _cymPingLast = -1;                             // §7 last pinged band (nove
 // v60 FULL-SONG-SYNC state: snap-reset amplitude EMAs + the deterministic flow accumulator + stereo auto-range.
 let _cymFluxS=0, _cymFlowPh=0, _cymFlowLastT=0, _cymCrisp=0, _cymGlow=0, _cymHat=0, _cymBright=0, _cymEllip=0, _swLo=1, _swHi=0;
 let _lzUHarm=0, _lzChPhase=0, _lzKeyBase=0.55, _lzKeyWarm=0, _lzUFlow=0, _lzUCell=0;   // v67 laser-color stash (set in drawGLCymatic, read by _lzCellHue) — deterministic copy of the shader's cellHue inputs
+let _lzSym=0, _lzCellEff=0, _lzKMul=1;   // v71 laser-GEOMETRY stash: the EXACT deterministic sym folds / effective cell / ring-fineness the shader used this frame, so the laser SIM traces what's rendered
 // canonical snap-reset EMA: snap to instant on seek, else frame-rate-invariant smooth. (amplitude/color/edge class only — never geometry)
 function cymEMA(prev, tgt, base, snap){ return snap ? tgt : prev + (tgt-prev)*(1 - Math.pow(base,(typeof _dtf==='number'&&_dtf>0)?_dtf:1)); }
 // LITE mode-count budget, hoisted so buildCymCoef() can clamp foc into the rendered index window (shader
@@ -2273,6 +2277,7 @@ function cymModeCap(){ return (typeof LITE!=='undefined' && LITE) ? ((typeof dQ=
 let _dnaMap=null, _dnaScanId=0, _dnaScanning=false, _dnaProgress=0, _dnaSrcKey='', _dnaErr='';
 let _dnaFoc=0.4, _dnaBright=1, _dnaDensity=0, _dnaPunch=0, _dnaHue=200, _dnaWarm=0, _dnaSection='', _dnaAnticip=0;
 let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70: textural "virtual-slider" levels conducted from the Song Map (so ONE toggle = a full rich show)
+let _dnaC=0, _cymCEnv=0, _dnaCell=0;   // v71: _dnaC = per-song-normalized + expanded MUSICAL-INTENSITY signal (deterministic, drives geometry complexity); _cymCEnv = its fast-attack/slow-release envelope (amplitude/color); _dnaCell = intensity-driven line->CELL crossfade (delicate lines verse -> filled BassForge mandala at the drop)
 function _dnaFFT(re,im){ const n=re.length;
   for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
   for(let len=2;len<=n;len<<=1){ const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
@@ -2335,9 +2340,22 @@ async function _dnaScan(buf, id){
   norm(rms); norm(flux); norm(cen);
   let cs=0; for(let p=0;p<12;p++) cs+=chromaSum[p]; if(cs>0) for(let p=0;p<12;p++) chromaSum[p]/=cs;
   for(let f=0;f<nf;f++){ let s=0; for(let p=0;p<12;p++) s+=chromaTS[f*12+p]; if(s>0) for(let p=0;p<12;p++) chromaTS[f*12+p]/=s; }
+  // v71 WIDE-DYNAMIC-RANGE: per-song MUSICAL-INTENSITY arc (the verse<->drop "how much is going on" fader).
+  // Composite = loudness + spectral flux + spectral ENTROPY (loudness-independent busyness) + active-band COVERAGE
+  // + centroid, then PERCENTILE-normalized (p05..p95) so every song fills 0..1 (the fix for "too little difference").
+  const _bMax=new Float32Array(NB); for(let f=0;f<nf;f++){ const o=f*NB; for(let b=0;b<NB;b++){ const v=bands[o+b]; if(v>_bMax[b])_bMax[b]=v; } }
+  const _Iarr=new Float32Array(nf);
+  for(let f=0;f<nf;f++){ const o=f*NB; let sum=0; for(let b=0;b<NB;b++) sum+=bands[o+b];
+    let ent=0, cov=0; if(sum>1e-9){ for(let b=0;b<NB;b++){ const p=bands[o+b]/sum; if(p>1e-6) ent-=p*Math.log(p); if(bands[o+b] > 0.18*(_bMax[b]||1e-9)) cov++; } }
+    ent/=Math.log(NB); cov/=NB;
+    _Iarr[f] = 0.30*rms[f] + 0.25*flux[f] + 0.20*ent + 0.15*cov + 0.10*cen[f];
+  }
+  const _srt=Array.from(_Iarr).sort((a,b)=>a-b); const _pc=q=>_srt[Math.max(0,Math.min(_srt.length-1,Math.floor(q*(_srt.length-1))))];
+  const _lo=_pc(0.05), _sp=Math.max(1e-3,_pc(0.95)-_lo);
+  for(let f=0;f<nf;f++) _Iarr[f]=Math.max(0,Math.min(1,(_Iarr[f]-_lo)/_sp));
   const _secs=_dnaSections(rms,HZ,nf);
   return { hz:HZ, n:nf, nb:NB, dur:buf.duration, bpm:_dnaTempo(flux,HZ), key:_dnaKey(chromaSum),
-    ts:{rms,cen,flux,bands,chroma:chromaTS}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70: pass sections so the section-jump drop signal runs
+    ts:{rms,cen,flux,bands,chroma:chromaTS,intensity:_Iarr}, sections:_secs, drops:_dnaDrops(rms,HZ,nf,_secs) }; }   // v70+v71: sections feed the drop signal; intensity = the per-song complexity arc
 // Only 'track' (decoded buffer) + 'stream' (downloadable URL) carry scannable PCM. demo (live synth),
 // mic, yt (IFrame), none/loading -> NO key. A keyless source is NEVER scanned, and a FAILED attempt
 // LATCHES its key (via _dnaErr in the guard) so it never retries -> this is what kills the toast-spam loop.
@@ -2390,10 +2408,24 @@ function dnaConduct(songT){
   _dnaHatL   = Math.max(0,Math.min(1, hat*0.85 + flux*0.20));                      // rim sparkle: hi-hat band
   _dnaHarmL  = Math.max(0,Math.min(1, 0.40 + mid*0.40 + secE*0.20));               // harmony color spread
   _dnaFlowR  = 0.35 + flux*0.6 + secE*0.35 + antic*0.40;                           // rotation/flow RATE multiplier (not 0..1)
+  // ----- v71 MASTER COMPLEXITY SIGNAL _dnaC (deterministic; drives geometry intricacy) -----
+  // Per-song-normalized intensity (from the scan) gets a SECTION FLOOR + anticipatory BUILD + drop SLAM, then a
+  // dynamic-range EXPANDER (smoothstep + power) so verses crush toward 0 and drops slam toward 1 (festival "contrast
+  // principle"). gExp scales with cymComplexity -> the operator's verse<->drop separation knob.
+  const _In = (m.ts.intensity && m.ts.intensity[idx]) || 0;
+  let _cb = Math.max(_In, secE*0.85);                       // section energy sets a hard FLOOR
+  _cb = Math.max(0, Math.min(1, _cb + 0.35*antic + 0.5*punch));   // build ramps above the floor; drop frame slams
+  const _cxk = (typeof cfg.cymComplexity==='number'?cfg.cymComplexity:0)/100;
+  let _sm; if(_cb<=0.18)_sm=0; else if(_cb>=0.78)_sm=1; else { const t=(_cb-0.18)/0.60; _sm=t*t*(3-2*t); }   // smoothstep(0.18,0.78)
+  _dnaC = Math.pow(_sm, 1.0 + _cxk*1.4);                    // gExp 1.0(slider0)..2.4(slider100); slider70 -> ~1.98
+  // v71: intensity also crossfades LINE -> filled CELL (the BassForge plate). Verse = delicate nodal lines;
+  //      drop = dense iridescent antinode cells. smoothstep(0.45,0.92) so cells only bloom in the upper range.
+  { const t=Math.max(0,Math.min(1,(_dnaC-0.45)/0.47)); _dnaCell = (cfg.cymComplexity>0) ? t*t*(3-2*t) : 0; }
 }
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
   const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
+  const _cxK = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && cfg.cymSongDNA && _dnaMap;   // v71 complexity engine engaged (hoisted: used by foc bias, kDraw, density)
   // 1) SPECTRAL-SYNC mapping (the fix for "the figure stayed the same shape while the Hz changed"):
   //    fBands are log/AGC'd, which FLATTENS the spectrum -> the old contiguous-slice map + rolloff +
   //    resting floor collapsed to modes [0..3] regardless of frequency. Instead: contrast-enhance
@@ -2454,6 +2486,10 @@ function buildCymCoef(){
     if(!_genSnap){ const ab=1-Math.pow(0.85,(typeof _dtf==='number'&&_dtf>0)?_dtf:1); _cymBassDom += (bassDom-_cymBassDom)*ab; }
     foc = Math.max(0, Math.min(cymModeCap()-1, foc - _cymBassDom*_bassPull*8.0));   // 808 sinks foc up to 8 modes
   }
+  // v71: musical intensity walks the dominant mode UP the z-sorted Bessel ladder (higher order = finer concentric
+  //      lacework). C=0 -> foc unchanged (byte-identical); C=1 -> pulled 50% toward the top order. This is how a
+  //      drop gets fine filigree at fixed kDraw — the "spend the upper dynamic range on finer single modes" rule.
+  if(_cxK) foc = Math.min(cymModeCap()-1, foc + 0.50*_dnaC*((CYM_NMODES-1)-foc));
   // Special-case the default so sync=50 reproduces the v55 LITERALS exactly (no ~1-ULP float drift), then ramp.
   const sigma  = (_sync===0.5) ? 2.8  : 4.2 - _sync*2.8;     // 4.2 (subtle, wide) .. 1.4 (dramatic, tight)
   const wFocus = (_sync===0.5) ? 0.55 : 0.40 + _sync*0.30;   // 0.40 .. 0.70
@@ -2520,7 +2556,12 @@ function buildCymCoef(){
   let kDraw = CYM_KDRAW;
   if(typeof LITE!=='undefined' && LITE) kDraw = liteLoad ? 2 : 3;   // LITE caps K at 3, drops to 2 under load
   const en = (typeof Q!=='undefined' && Q && Q.energy===Q.energy) ? Q.energy : 0;
-  if(en > 0.7) kDraw += 1;
+  if(_cxK && !(typeof LITE!=='undefined'&&LITE)){
+    // v71: musical intensity drives the mode count 3->7 over the first 60% of the range, then FREEZE (Miller 7±2
+    //      crisp budget). Past 60%, the remaining dynamic range is spent on FINER single modes (focus order + radial-K
+    //      + symmetry below) which each stay a crisp eigenfunction — NOT more overlapping fields (the anti-mush rule).
+    kDraw = 3 + Math.round(Math.min(_dnaC,0.6)/0.6 * 4);    // 3..7
+  } else if(en > 0.7) kDraw += 1;
   // v56-3: beat-synced mode bloom — ignite extra modes on a beat boundary with high energy/kick, then
   // decay. Bound is kDraw=Math.min(CYM_NMODES,kDraw) below + the shader's k>=uNModes break. Decay uses
   // _dtf (frame-rate-smoothed, audio-reactive — NOT bit-reproducible); resets to 0 on _genSnap (seek/seed).
@@ -2533,10 +2574,13 @@ function buildCymCoef(){
     _cymBloomEnv *= Math.pow(0.90, _dt2);   // ~0.5s tail
     if(_cymBloomEnv > 0.15) kDraw += (_cymBloomEnv > 0.5 ? 2 : 1);
   }
-  kDraw = Math.min(CYM_NMODES, kDraw);
-  if(cfg.cymSongDNA && _dnaMap && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*2));   // v70 DNA: GENTLY denser in big sections (+2 max — keep the CLEAN delicate sacred-geometry look, NOT the rejected v50 density-crank; soft-gate may be off by default)
+  kDraw = Math.min(_cxK ? 7 : CYM_NMODES, kDraw);   // v71: when complexity-driven, hard-cap simultaneous LINE modes at 7 (crisp budget); cell mode (below) may still exceed for the dense CymaScope fill
+  if(cfg.cymSongDNA && _dnaMap && !_cxK && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*2));   // v70 DNA density path — only when the v71 complexity engine is OFF (cymComplexity=0)
   // v60 #10: water-cell mode lights MORE modes (denser CymaScope field) — desktop only; soft-gate still bounds runaway.
-  if((typeof cfg.cymCell==='number'?cfg.cymCell:0)>0.001 && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(cfg.cymCell/100*8));
+  // v71: the effective cell (operator slider OR intensity-driven _dnaCell) adds the dense filled-mandala modes — this
+  //      is what lets a DROP explode into a BassForge-grade plate (up to ~15 modes) while the LINE budget stays 7.
+  const _cellEff = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxK?_dnaCell:0);
+  if(_cellEff>0.001 && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_cellEff*8));
   const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);   // value-rank (v58 already pays this)
   if(cfg.cymSoftGate){
     // §3 (v59): top-K-bounded SOFT skirt — only boundary modes (rank kDraw-1..kDraw+1) feather; everything
@@ -2559,7 +2603,9 @@ function buildCymCoef(){
   }
   // 3) soft-normalize kept set so total contour density is loudness-stable (~1.2 sum).
   let tot=0; for(let k=0;k<CYM_NMODES;k++) tot += _cymRaw[k];
-  if(tot > 1e-4){ const sc = 1.2/tot; for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
+  // v71: total contour density tracks musical intensity (0.55x verse .. 2.0x drop) instead of the constant 1.2 that
+  // FLATTENED the dynamic range (the #1 reason verse and drop looked the same). Bounded -> wide swing, never unbounded mush.
+  if(tot > 1e-4){ const sc = (_cxK ? (0.55 + 1.45*_dnaC) : 1.2)/tot; for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] *= sc; }
   // 4) EMA smoothing — snap ONCE on seek/restart/seed-change then smooth; _dtf -> frame-rate independent.
   if(_genSnap){
     for(let k=0;k<CYM_NMODES;k++) _cymCoef[k] = _cymRaw[k];
@@ -2595,6 +2641,13 @@ function drawGLCymatic(tt){
   const coef = buildCymCoef();                       // consumes _genSnap exactly once
   if(_snap0) _cymPunchEnv = 0;                        // reset the kick-punch envelope on seek/restart/seed change
   let sym = Math.max(1, Math.min(cfg.cymCell>0.001?16:8, (cfg.symmetry|0) || 1));   // v60 🌊: water-cell mode allows up to 16-fold for the dense CymaScope mandala
+  const _cxD = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && cfg.cymSongDNA && _dnaMap;   // v71 complexity engine engaged
+  if(_cxD){
+    // v71: musical intensity adds symmetry FOLDS (more petals = more mandala complexity into the drop). Deterministic
+    //      tier from _dnaC (pure fn of songT -> seek-reproducible); smoothstep flattening near edges damps flicker.
+    const _st = _dnaC<=0.30?0 : _dnaC>=0.92?1 : (()=>{ const t=(_dnaC-0.30)/0.62; return t*t*(3-2*t); })();
+    sym = Math.max(1, Math.min((cfg.cymCell>0.001||_dnaCell>0.001)?16:12, sym + Math.round(_st*6)));   // +0..+6 folds (cap 12 line / 16 cell)
+  }
   if(LITE) sym = Math.min(6, sym);
   // §6 (v59 cymSymBreath): breathing FRACTIONAL symmetry — the kfold mirror axis slowly turns + the petal count
   //     breathes sub-integer. Pure songT LFOs (deterministic, seek-snapped), exactly like _tiltX/uSpin. Needs symmetry>=2.
@@ -2617,6 +2670,7 @@ function drawGLCymatic(tt){
     nModes = Math.max(4, Math.min(nModes, bloom));   // only ever reduces/holds (clamped to the cap)
   }
   let scale = 2.2;
+  if(_cxD) scale *= (1 - 0.18*_dnaC);   // v71: intensity grows the medallion to reveal more concentric structure (deterministic)
   let temp  = 0.55 + (cfg.trail!=null ? (cfg.trail-15)/55*0.4 : 0.2);   // same knob GENESIS uses
   // v56-7: intensity sharpens lines (raises uTemp toward crisp). 100 = +0 (v54 baseline), lower = softer.
   const _it=(typeof cfg.cymIntensity==='number'?cfg.cymIntensity:100)/100; temp = Math.min(1, temp + (_it-1)*0.25);
@@ -2662,12 +2716,17 @@ function drawGLCymatic(tt){
   }
   // ===== v60 FULL-SONG-SYNC drivers — each owns ONE orthogonal visual axis; all snap-reset / deterministic =====
   const _refAtt = cfg.refract ? 0.6 : 1.0;
+  // v71: fast-attack / slow-release envelope of the complexity signal — amplitude/color levers ride this (geometry uses
+  //      the raw deterministic _dnaC). ~40ms attack = the drop SLAMS into full intensity; ~0.5s release = it exhales back.
+  { const _tgt=_cxD?_dnaC:0, _dt=(typeof _dtf==='number'&&_dtf>0)?_dtf:1;
+    if(_snap0) _cymCEnv=_tgt; else _cymCEnv += (_tgt-_cymCEnv)*(1 - Math.pow(_tgt>_cymCEnv?0.04:0.90, _dt)); }
   // (b) spectral FLUX -> deterministic FLOW phase. Re-seeded to closed-form songT*base on seek; flux only scales the rate.
   _cymFluxS = cymEMA(_cymFluxS, (typeof Q!=='undefined'&&Q&&Q.flux===Q.flux)?Q.flux:0, 0.85, _snap0);
   { const dT=Math.max(0,Math.min(0.1, songT-_cymFlowLastT)); _cymFlowLastT=songT;
     const flowGain=(typeof cfg.cymFlow==='number'?cfg.cymFlow:0)/100*1.4;
     const _dnaR=(cfg.cymSongDNA&&_dnaMap)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
-    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR); }
+    const _cxR=_cxD?_dnaC*0.55:0;                             // v71: intensity accelerates rotation into the drop (deterministic raw _dnaC)
+    if(_snap0) _cymFlowPh = songT*0.35; else _cymFlowPh += dT*(0.35 + _cymFluxS*flowGain + _dnaR + _cxR); }
   const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap)) ? _cymFlowPh : 0;
   // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
   _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
@@ -2686,6 +2745,7 @@ function drawGLCymatic(tt){
   let _uGlow  = _cymGlow  * _gGlow/100;
   let _uHat   = _cymHat   * _gHat/100;
   if(_dnaOn){ _uCrisp = Math.max(_uCrisp, _dnaCrispL*0.65); _uGlow = Math.max(_uGlow, _dnaGlowL*0.55); _uHat = Math.max(_uHat, _dnaHatL*0.55); }
+  if(_cxD){ _uCrisp = Math.max(_uCrisp, Math.min(0.55, 0.30 + 0.55*_cymCEnv)); _uGlow = Math.max(_uGlow, 0.22 + 0.42*_cymCEnv); }   // v71: denser = SHARPER + brighter; CAP crisp at 0.55 so cell-band dark gaps NEVER close (>0.83 would solid-fill -> the rejected v50 mush)
   _uGlow *= (0.85+0.15*Math.sin(songT*0.6)) * _refAtt;
   let _uBright = 1.0;
   if((typeof cfg.cymBright==='number'?cfg.cymBright:0)>0){
@@ -2759,7 +2819,8 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uTiltY'), _tiltY);
     g.uniform1f(glU(P,'uSymBreath'), _uSymBreath);   // §6: 0 when cymSymBreath=0 -> shader selects v58 kfold (bit-identical)
     g.uniform1f(glU(P,'uSymWobble'), _uSymWobble);
-    g.uniform1f(glU(P,'uCell'), (typeof cfg.cymCell==='number'?cfg.cymCell:0)/100);   // v60 🌊 water-cell fill mix
+    g.uniform1f(glU(P,'uCell'), Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0));   // v60 🌊 water-cell fill mix; v71: intensity crossfades line->filled cells (BassForge plate at the drop)
+    g.uniform1f(glU(P,'uKMul'), _cxD ? (1 + 0.6*_dnaC) : 1.0);   // v71: tighten concentric rings on intense passages (1.0 = byte-identical when complexity off)
     g.uniform1f(glU(P,'uFuse'),  fused ? 1.0 : 0.0);
     g.uniform1f(glU(P,'uPunch'), _uPunch);
     // ---- v60 full-song-sync + CymaScope uniforms (all default to a neutral value -> cymCell=0 byte-identical) ----
@@ -2777,6 +2838,7 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uKeyWarm'), _uKeyWarm);
     // v67: stash the EXACT cellHue inputs so the laser mandala colors identically (deterministic; no re-derivation drift; zero shader effect)
     _lzUHarm=_uHarm; _lzChPhase=_chPhase; _lzKeyBase=_uKeyBase; _lzKeyWarm=_uKeyWarm; _lzUFlow=_uFlow;
+    _lzSym=sym; _lzCellEff=Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0); _lzKMul=(_cxD?(1+0.6*_dnaC):1.0);   // v71: stash the EXACT geometry the shader used so the laser SIM matches
     _lzUCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
     g.uniform1f(glU(P,'uCellPal'), cfg.cymCellPalette?1.0:0.0);
     g.uniform1f(glU(P,'uBgTint'),  cfg.cymBgTint?1.0:0.0);
@@ -3063,10 +3125,10 @@ function _cymPhase(x,y,sym){
   for(let k=0;k<CYM_NMODES;k++){ const a=_cymCoef[k]; if(a<=0.0005) continue;
     const n=CYM_MODES[k][0], z=CYM_MODES[k][2]; F += a*_cymJlut(n, z*r)*Math.cos(n*ang); }
   const aFr = Math.abs(F)*(1.0 + r*2.4);                  // folded r/ang -> rings inherit kfold symmetry
-  const uCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
+  const uCell=(typeof _lzCellEff==='number')?_lzCellEff:((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100);   // v71: effective cell (incl. intensity-driven _dnaCell) so the galvo rings appear exactly when the shader's do
   const K = 4.0 + uCell*12.0;                             // un-punched density (uPunch dropped for determinism)
-  const flow=((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) ? _cymFlowPh : 0;   // matches _uFlow gating
-  return aFr*K + r*13.0 - flow*1.6;
+  const flow=(typeof _lzUFlow==='number')?_lzUFlow:(((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0)?_cymFlowPh:0);   // match the shader's actual _uFlow (incl. DNA-driven flow)
+  return aFr*K + r*13.0*(typeof _lzKMul==='number'?_lzKMul:1) - flow*1.6;   // v71: uKMul ring-fineness, mirroring FRAG_CYMATIC
 }
 // Fill an N×N grid in [-1,1] from a sampler; also return min/max (for ring level range).
 function _cymFillGrid(sample,N,sym){
@@ -3259,7 +3321,7 @@ function _lzTessPolys(songT){
 function drawCymLaserSIM(ctx, songT){
   if(!cfg.cymLaser) return;
   if(!_cymLUT) buildBesselLUT();
-  let sym = Math.max(1, Math.min(8,(cfg.symmetry|0)||1)); if(LITE) sym=Math.min(6,sym);
+  let sym = (typeof _lzSym==='number'&&_lzSym>=1) ? _lzSym : Math.max(1, Math.min(8,(cfg.symmetry|0)||1)); if(LITE) sym=Math.min(6,sym);   // v71: mirror the shader's actual fold count (incl. the intensity fold-add) so the laser traces what's rendered
 
   if(!cfg.cymLaserGalvo){
     // ---------- v57 PATH — byte-identical: {F=0} nodal polylines + tesseract + 2-line HUD ----------
@@ -3308,7 +3370,7 @@ function drawCymLaserSIM(ctx, songT){
     const tess = _lzTessPolys(songT);   // v67: DETERMINISTIC cage edges in [-1,1] (NOT the live-EMA'd _tssP)
     const powerCap=Math.max(0,Math.min(1,(typeof cfg.cymLaserPower==='number'?cfg.cymLaserPower:100)/100));
     const N0=LITE?72:96, RN0=LITE?88:128;
-    const hasCells=(typeof cfg.cymCell==='number'?cfg.cymCell:0)>0;   // rings only when cells are on -> laser draws what the shader shows
+    const hasCells=((typeof _lzCellEff==='number')?_lzCellEff:((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100))>0.001;   // v71: rings when the EFFECTIVE cell (slider OR intensity-driven) is on -> laser draws what the shader shows
     const buildLevels=(N,eps)=>{
       const lvl0=_cymContourFromGrid(_cymFillGrid(_cymF,N,sym).grid, 0, N, eps);
       const levels=[{level:0, polys:lvl0}];
@@ -5629,6 +5691,7 @@ bindSw('swCymBrain', 'cymBrain', (on) => {
   // v56-10: chroma now computes for the brain without forcing Key-color (body recolor stays opt-in).
 });
 bindRange('setCymIntensity', 'cymIntensity');
+bindRange('setCymComplexity', 'cymComplexity');
 // v56 cymatic-organism controls
 bindSw('swCymTesseract', 'cymTesseract', () => { _tssSnapSeen = null; });   // re-arm rotation on enable
 bindSw('swCymTessSpin', 'cymTessSpin');
@@ -5909,7 +5972,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
