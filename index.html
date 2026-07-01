@@ -724,7 +724,12 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>Depth plates <span class="sub">(2.5D parallax layers — near=bass, far=treble, slow camera/tilt)</span></label><div class="sw" id="swParallax"></div></div>
       <div class="row"><label>Scanline glitch <span class="sub">(waveform tears the frame + slit-scan smear on hits)</span></label><div class="sw" id="swGlitch"></div></div>
       <div class="row"><label>Optical-flow sparks <span class="sub">(particles stream along the actual on-screen motion)</span></label><div class="sw" id="swFlow"></div></div>
-      <div class="row"><label>✴ GENESIS field <span class="sub">(the song rendered AS a seeded neural-field equation — crisp iso-contour sacred geometry, generative)</span></label><div class="sw" id="swGenesis"></div></div>
+      <div class="row"><label>✴ Genesis · Song equation <span class="sub">(the flagship — the song rendered as a living cymatic organism: Bessel standing-wave sacred geometry + DNA decoder + emotion color + a metadata figure for YouTube/mic. All the cymatic tuning is baked in; just switch it on (or pick it from the pattern dropdown).)</span></label><div class="sw" id="swGenesis"></div></div>
+      <!-- The "Genesis · Song equation" cymatic controls are HARD-BAKED into that pattern (applyGenesisBake) and hidden
+           from the global Settings panel to declutter it: they only affect that one pattern, so they misled users and
+           overcrowded Settings. Selecting the pattern applies the full tuned north-star organism. Kept in the DOM (not
+           deleted) so their binds/init resolve harmlessly; to re-expose any control, move its row out of this wrapper. -->
+      <div id="cymBakedControls" style="display:none" aria-hidden="true">
       <div class="row"><label>◎ Cymatic field <span class="sub">(GENESIS sub-mode: the song as a real Bessel eigenmode standing-wave — nodal-line cymatic sacred geometry)</span></label><div class="sw" id="swCymatic"></div></div>
       <div class="row"><label>◎ — Frequency-true color <span class="sub">(paint the figure by its own spectrum — each region colored by the frequency it carries)</span></label><div class="sw" id="swCymFreqColor"></div></div>
       <div class="row"><label>◎ — Brain connectogram <span class="sub">(brain-scan overlay: 12 chroma nodes + coherence edges = the nervous system)</span></label><div class="sw" id="swCymBrain"></div></div>
@@ -780,6 +785,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◉ — Laser mandala <span class="sub">(v67: trace the FULL water-cell mandala — concentric ring level-sets + the nodal skeleton — as a Helios-shaped laser frame: analog RGB, slew-ordered strokes, blanking + a live point-budget governor. Needs ◉ Laser frame above; off = v57 nodal-only. Rings appear when 🌊 Water cells is on)</span></label><div class="sw" id="swCymLaserGalvo"></div></div>
       <div class="row"><label>◉ — Scan amplitude <span class="sub">(±deg at the cube; safety cap 4.3°. Documentary in the SIM)</span></label><input type="range" class="prng" id="setCymScanCap" min="0" max="4.3" step="0.1" value="4"></div>
       <div class="row"><label>◉ — Laser power <span class="sub">(brightness of the traced frame; 100 = full)</span></label><input type="range" class="prng" id="setCymLaserPower" min="0" max="100" value="100"></div>
+      </div><!-- /cymBakedControls -->
       <div class="row"><label>Camera background</label><div class="sw" id="swCam"></div></div>
       <div class="btnrow"><button class="pbtn amber" id="randBtn">🎲 Random mode</button><button class="pbtn amber" id="surpriseBtn">✨ Surprise show</button></div>
     </div>
@@ -1037,6 +1043,7 @@ const cfg = Object.assign({
   cymFOL:0,            // #17 flower-of-life center motif
   cymCellBloom:0,      // #19 threshold bloom on the brightest cells
   cymIrid:0,           // #20 oil-slick iridescent sheen
+  cymEngrave:0,        // v79 ENGRAVED look — harmonic sub-contours + angular striations + organic petals (0 = off, byte-identical v75 outside the Genesis flagship; baked to 45 in _GENESIS_BAKE)
   cymSyncAll:false,    // v60 MASTER 'Full sync' macro — writes the whole orchestra at balanced gains
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
@@ -2104,6 +2111,7 @@ uniform float uSeamAA;   // #16 seam feather
 uniform float uFOL;      // #17 flower-of-life core
 uniform float uCellBloom;// #19 cell bloom
 uniform float uIrid;     // #20 oil-slick sheen
+uniform float uEngrave;  // v79 ENGRAVED: harmonic sub-contours + angular striations + organic petal envelope (0 = byte-identical v75 cell view; brightness-only -> laser-SIM parity kept)
 
 const float Zk[NMODES] = float[NMODES](
   2.4048, 3.8317, 5.1356, 5.5201, 6.3802, 7.0156, 7.5883, 8.4172,
@@ -2256,6 +2264,32 @@ void main(){
     float _contour= (1.0 - smoothstep(0.0, (0.7 + uCellGap*1.2)*fwb, _cdist)) // crisp dark line, width grows a touch with the transparency knob
                     * (1.0 - smoothstep(0.34, 0.5, fwb));                     // graceful sub-pixel fade-out (no chaos)
     cell *= (1.0 - _contour * 0.55 * core * vign);                           // thin crisp dark lines (moderate strength so the cells stay bright/colored, not dimmed)
+    // ===== v79 ENGRAVED cymatic — 3 pure-brightness modulations of cell; phase is UNTOUCHED (laser-SIM parity kept).
+    //       All gated by uEngrave (0 => byte-identical). All reuse the shipped crisp-line AA idiom + the angMix r->0 fade.
+    if(uEngrave > 0.001){
+      // (a) HARMONIC SUB-CONTOURS — nested 2f/3f overtone rings etched inside each cell (no new modes).
+      //     Footprint of fract(H*phase) is H*fwb, so line width + sub-pixel fade MUST scale by H or the harmonics alias.
+      float _h2  = abs(fract(phase*2.0) - 0.5);
+      float _h3  = abs(fract(phase*3.0) - 0.5);
+      float _fw2 = fwb*2.0;
+      float _fw3 = fwb*3.0;
+      float _e2  = (1.0 - smoothstep(0.0, 0.75*_fw2, _h2)) * (1.0 - smoothstep(0.34, 0.5, _fw2));
+      float _e3  = (1.0 - smoothstep(0.0, 0.75*_fw3, _h3)) * (1.0 - smoothstep(0.34, 0.5, _fw3));
+      float _etch = (_e2*0.60 + _e3*0.40) * core * vign * angMix;   // strong antinode => engraved; angMix => no beaded center
+      cell *= (1.0 - _etch * 0.42 * uEngrave);                      // DARKEN the nested lines; factor in [0.58,1] => no holes
+      // (b) ANGULAR STRIATIONS — a fine combed grain locked to the honeycomb (integer Mang => kfold-seam-safe),
+      //     bent by |F| (aFr) so it curves with the figure instead of a straight sunburst.
+      float _striPh = ang*0.15915494*(Mang*3.0) + aFr*0.6;
+      float _striFw = fwidth(_striPh) + 1e-4;
+      float _stri   = (1.0 - smoothstep(0.0, 1.1*_striFw, abs(fract(_striPh) - 0.5)))
+                    * (1.0 - smoothstep(0.34, 0.5, _striFw));
+      cell *= (1.0 - _stri * 0.14 * core * vign * angMix * uEngrave);   // light comb, factor in [0.86,1] => no holes
+      // (c) ORGANIC PETAL ENVELOPE — bend the cell READ toward soft lobes (brightness only; does NOT move phase).
+      //     Np derived from Mang + ring-parity phase => petals interleave row-to-row; angMix keeps the core round.
+      float _Np    = floor(max(3.0, Mang*0.5) + 0.5);
+      float _petal = 0.5 + 0.5*cos(_Np*ang - 3.14159265*mod(ringId, 2.0));
+      cell *= mix(1.0, 0.62 + 0.38*_petal, angMix*uEngrave);           // valleys dim to 0.62, never black => no holes
+    }
     cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
     cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
     if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp(((uCellGap+0.02)-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp; gap follows uCellGap)
@@ -3527,6 +3561,7 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uFOL'),     (typeof cfg.cymFOL==='number'?cfg.cymFOL:0)/100);
     g.uniform1f(glU(P,'uCellBloom'),(typeof cfg.cymCellBloom==='number'?cfg.cymCellBloom:0)/100 * _refAtt);
     g.uniform1f(glU(P,'uIrid'),    (typeof cfg.cymIrid==='number'?cfg.cymIrid:0)/100);
+    g.uniform1f(glU(P,'uEngrave'), (typeof cfg.cymEngrave==='number'?cfg.cymEngrave:0)/100);   // v79 ENGRAVED (0 = byte-identical; SIM does not read it)
   });
   // Phase C: draw the connectogram on the SAME module-level 2D ctx glDrawSingle composited into.
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
@@ -6189,12 +6224,42 @@ function markActiveMode(){
   if(info){ const mn = $('modeName'); if(mn) mn.textContent = info.label.toUpperCase(); const mb = $('modeBtn'); if(mb) mb.querySelector('.ti').textContent = info.glyph; }
   if(typeof reflectModeCtrls === 'function') reflectModeCtrls();
 }
+// ===== "Genesis · Song equation" = the flagship BAKED cymatic organism =====
+// The operator's directive: the cymatic settings only affect this ONE pattern, so instead of ~50 rows cluttering the
+// global Settings panel they are HARD-BAKED here and applied when the pattern is selected. This is the tuned v54-v75
+// north-star look (DNA decoder + always-on emotion + Phase-2 metadata-DNA + freq-true color + moderate water cells +
+// the Gnosis ending + de-pop stabilizers), clean-not-messy (heavier extras — brain / tesseract / depth / laser SIM —
+// stay off). Users select the pattern and get the whole living organism with zero fiddling.
+const _GENESIS_BAKE = {
+  genMode:'cymatic',
+  cymSongDNA:true, cymMetaDNA:true, cymDNAv2:true,        // decode real PCM; synthesize a figure for keyless sources; accurate deep-bass harmony
+  cymGnosis:true, cymGnosisHold:60,                       // the crystallizing "completion" ending
+  cymComplexity:70,                                       // delicate verse -> dense drop
+  cymFreqColor:true, cymIntensity:100,                    // paint the figure by its own spectrum
+  cymCell:60, cymCellGap:12, cymCellPalette:true,         // BassForge/CymaScope water cells (moderate = crisp, not muddy) + jewel tones
+  cymHyst:true, cymSmooth:true, cymSoftGate:true,         // de-pop: stable, clean negative space
+  cymRest:1, cymDisc:82, cymSync:50,                      // flower resting form + medallion cut + default sync feel
+  // heavier extras + manual sync axes stay OFF (clean sacred-geometry, the DNA engine drives everything):
+  cymBrain:false, cymTesseract:false, cymTessSpin:false, cymTessSpeed:50, cymSpin:0, cymBloom:false,
+  cymPalette:false, cymPureSpectrum:false, cymDepth:0, cymDepthDyn:false, cymFuse:false, cymPunch:0, cymLead:0,
+  cymDecomp:0, cymBass:0, cymSymBreath:0, cymPing:false, cymSyncAll:false, cymHarmonyGain:0, cymFlow:0,
+  cymCrisp:0, cymGlow:0, cymHat:0, cymStereo:0, cymBright:0, cymBgTint:false, cymMicro:0, cymMeniscus:0,
+  cymFlat:0, cymSeamAA:0, cymFOL:0, cymCellBloom:0, cymIrid:0, cymEngrave:45, cymLaser:false, cymLaserGalvo:false,
+};
+let _genesisBakedOnce = false;
+function applyGenesisBake(){
+  for(const k in _GENESIS_BAKE) cfg[k] = _GENESIS_BAKE[k];   // shared keys (symmetry/palette/brightness) are deliberately NOT baked — the user keeps those
+  _genesisBakedOnce = true;
+  try{ if(typeof saveCfg==='function') saveCfg(); }catch(_){}
+  try{ if(cfg.cymSongDNA && typeof dnaEnsureScan==='function') dnaEnsureScan(); }catch(_){}
+}
 function setMode(m){
   if(mode && mode !== m){
     saveModeSettings(mode);
     if(cfg.transitions && !cfg.reduce && laserOn) transPending = true;   // crossfade out the old pattern
   }
   mode = m;
+  if(m === 'genesis') applyGenesisBake();   // the flagship pattern carries the whole baked cymatic organism
   pushModeRecent(m);
   const ms = modeSettings[m];
   if(ms){ manualBrightness = ms.b; manualSpeed = ms.s; manualIntensity = ms.i; manualHue = ms.h; manualGlow = ms.gl != null ? ms.gl : 1; manualThick = ms.th != null ? ms.th : 1; manualDensity = ms.de != null ? ms.de : 1; if(!audioReactive) reflectSliders(); } else { manualGlow = 1; manualThick = 1; manualDensity = 1; }
@@ -6744,7 +6809,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
