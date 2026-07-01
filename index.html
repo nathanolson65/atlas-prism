@@ -634,8 +634,8 @@ body.reduce .livedot{animation:none;}
     </div>
 
     <div class="grp"><h3>Music sources</h3>
-      <div class="row"><label>YouTube bridge <span class="sub">(built into the dev server → search ANY song, full. Leave blank = same origin)</span></label></div>
-      <input class="sel" id="setBridge" type="text" inputmode="url" placeholder="same origin (built-in) — or http://localhost:8124" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%">
+      <div class="row"><label>YouTube bridge <span class="sub">(built into the dev server → search ANY song, full. Blank = this PC. For your PHONE, paste a PERMANENT bridge — a Tailscale MagicDNS name or a Cloudflare NAMED tunnel. Not a *quick* tunnel: those mint a new URL every restart, which is why it kept going "unreachable." The app auto-probes this + falls back to free catalogs.)</span></label></div>
+      <input class="sel" id="setBridge" type="text" inputmode="url" placeholder="blank = this PC · or https://prism-bridge.your-tailnet.ts.net" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%">
       <div class="row" id="bridgeWarn" style="display:none"><label class="sub" style="color:var(--a)">⚠ This page is served over HTTPS, so an <b>http://</b> bridge will be blocked (mixed content). Use a same-origin or <b>https://</b> bridge — e.g. a Cloudflare tunnel. See youtube-bridge/README.md.</label></div>
       <div class="row"><button class="pbtn" id="connectBtn" style="width:100%">📱 Connect phone — stream full songs (QR)</button></div>
       <div class="row"><label>Jamendo client ID <span class="sub">(free key → adds the Jamendo full-track catalog)</span></label></div>
@@ -903,7 +903,7 @@ const cfg = Object.assign({
   volume:32, xfade:false, bassGain:100, midGain:100, trebleGain:100, beatThresh:140,
   palette:0, mono:false, symmetry:1, autocycle:false, strobe:false, camera:false,
   haptics:true, wake:false, autohide:false, big:false, reduce:false, lang:'en', jamendoKey:'',
-  bridgeUrl:'', refract:true, transitions:true, blend:false, blendMode:'aurora', blendMix:50,
+  bridgeUrl:'', ytProxy:'https://atlas-yt-proxy.nathanolson65.workers.dev', ytMode:'auto', refract:true, transitions:true, blend:false, blendMode:'aurora', blendMix:50,
   sat:100, light:62, blendPalette:2, blendHue:60, blendComp:'source-over', blendReverse:true, blendScale:55, customHue:300, customSpread:140, particles:true, feedback:false, shockwave:false, filmgrain:false, beamburst:false,
   pyramid:false, trail:30, pyramidSpin:false, pyramidSides:4, cycleMins:1, transMs:420,
   autoVJ:false, spinSpeed:25, playRate:100, lfo:false, adaptiveQ:true, showFps:false,
@@ -975,12 +975,42 @@ const cfg = Object.assign({
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
 if(cfg.bridgeUrl === 'http://localhost:8124') cfg.bridgeUrl = '';
 function saveCfg(){ LS.set('cfg', cfg); }
-/* On the DEPLOYED site (not localhost) default the YouTube bridge to the operator's tunnelled PC bridge
-   so YouTube full-song search works on the phone. Respects a user-set custom bridge; auto-updates the
-   baked URL across deploys via cfg._autoBridge. (Locally the bridge stays same-origin / blank.) */
-const DEFAULT_BRIDGE = 'https://subsequently-determination-feels-album.trycloudflare.com';
-if(!/^(localhost$|127\.|0\.0\.0\.0$)/.test(location.hostname) && (!cfg.bridgeUrl || cfg.bridgeUrl === cfg._autoBridge)){
-  cfg.bridgeUrl = DEFAULT_BRIDGE; cfg._autoBridge = DEFAULT_BRIDGE; saveCfg();
+/* ---- YouTube bridge AUTO-DISCOVERY (v76) -------------------------------------------------------
+   A phone can't reach a localhost bridge, and a Cloudflare *quick* tunnel mints a NEW url every
+   restart (that's why the baked link kept dying → "unreachable"). So instead of one hardcoded url we
+   PROBE an ordered candidate list against /health and use whichever ANSWERS — never a dead hardcode
+   again. Put your PERMANENT bridge (a Tailscale MagicDNS name or a Cloudflare NAMED tunnel — both keep
+   the same hostname across restarts) in ⚙ Settings → YouTube bridge; it's tried first. When nothing
+   answers we silently fall back to the free catalogs (and, later, the IFrame-embed + mic path). */
+if(/trycloudflare\.com/.test(cfg.bridgeUrl || '') && cfg.bridgeUrl === cfg._autoBridge){ cfg.bridgeUrl = ''; cfg._autoBridge = ''; saveCfg(); }   // retire dead quick-tunnels (fresh url each restart); localhost:8124 handled at line 976
+let RESOLVED_BRIDGE = null;                     // the candidate that last answered /health this session (runtime; null = unresolved)
+let _bridgeProbedNone = false;                  // v77: true once we've probed and found NO bridge this session -> skip re-probing every YouTube search (store users)
+function bridgeCandidates(){
+  const local = /^(localhost$|127\.|0\.0\.0\.0$)/.test(location.hostname);
+  const list = [];
+  if(local) list.push('');                                                    // same-origin dev server first (local)
+  if(cfg.bridgeUrl)        list.push(cfg.bridgeUrl.replace(/\/$/, ''));        // the operator's permanent bridge
+  if(cfg._bridgeResolved)  list.push(cfg._bridgeResolved.replace(/\/$/, ''));  // last-known-good from a prior session
+  if(Array.isArray(cfg.bridgeCandidates)) for(const c of cfg.bridgeCandidates){ if(c) list.push(String(c).replace(/\/$/, '')); }
+  if(!local) list.push('');                                                   // hosted deploy: same-origin last (usually 404, cheap)
+  return [...new Set(list)];
+}
+function bridgeBase(){ return (RESOLVED_BRIDGE !== null) ? RESOLVED_BRIDGE : ((cfg.bridgeUrl || '').replace(/\/$/, '')); }
+async function probeBridge(base, ms){       // resolves {reached, ok, reason}; reached = a REAL bridge answered (not a 404 page)
+  try{ const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), ms || 3500);
+    const r = await fetch(base + '/health', { signal: ctrl.signal, cache:'no-store' }); clearTimeout(to);
+    if(!r.ok) return { reached:false, ok:false, reason:'' };                                             // 404/5xx (e.g. a static host serving its own 404) = not our bridge
+    let j = null; try { j = await r.json(); } catch(_){ return { reached:false, ok:false, reason:'' }; }  // non-JSON page = not our bridge
+    if(!j || (!('ytdlp' in j) && !('youtube' in j))) return { reached:false, ok:false, reason:'' };       // wrong shape = not our bridge
+    return { reached:true, ok:!!j.ok, reason:j.reason || '' };
+  }catch(_){ return { reached:false, ok:false, reason:'' }; }
+}
+async function resolveBridge(){             // pick the FIRST reachable candidate (reachable even if YouTube is rate-limited); cache it
+  for(const base of bridgeCandidates()){
+    const p = await probeBridge(base, 3500);
+    if(p.reached){ RESOLVED_BRIDGE = base; _bridgeProbedNone = false; if(base && cfg._bridgeResolved !== base){ cfg._bridgeResolved = base; saveCfg(); } return Object.assign({ base }, p); }
+  }
+  RESOLVED_BRIDGE = null; _bridgeProbedNone = true; return { base:null, reached:false, ok:false, reason:'' };
 }
 
 /* ===================== MOBILE PERFORMANCE PROFILE (LITE) =====================
@@ -4861,17 +4891,24 @@ const quickFile     = document.getElementById('quickFile');
 function openSearch(){ searchPanel.classList.add('show'); checkBridge(); setTimeout(() => searchInput.focus(), 250); }
 async function checkBridge(){
   const el = document.getElementById('bridgeStatus'); if(!el) return;
-  const base = (cfg.bridgeUrl || '').replace(/\/$/, '');
-  el.textContent = 'Full songs: checking the YouTube bridge…'; el.className = 'sp-bridge';
-  try{
-    const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(base + '/health', { signal: ctrl.signal, cache:'no-store' }); clearTimeout(to);
-    const j = await r.json();
-    if(!j || !j.ok) throw 0;
-    el.textContent = '🟢 Full songs ready — YouTube bridge online'; el.className = 'sp-bridge ok';
-  }catch(_){
-    el.innerHTML = '🔴 YouTube bridge unreachable — only free catalogs play full. On a phone, run a tunnel and set its URL in ⚙ Settings → YouTube bridge.';
+  el.textContent = 'Full songs: finding the YouTube bridge…'; el.className = 'sp-bridge';
+  // v76: AUTO-DISCOVER across the candidate list, then report the HONEST state:
+  //   not reached anywhere -> offline (red)  |  reached + ok -> online (green)  |
+  //   reached but YouTube 403/rate-limited THIS instant -> still ONLINE, searches retry (yellow, NOT "unreachable")
+  const res = await resolveBridge();
+  if(!res.reached){
+    el.innerHTML = '🔴 No YouTube bridge reachable — free catalogs (Audius/Jamendo/Archive) + your own files still play full. On a phone the bridge needs your PC on with a live tunnel; add its URL in ⚙ Settings → YouTube bridge.';
     el.className = 'sp-bridge err';
+  } else if(res.ok){
+    const where = (res.base ? (res.base.replace(/^https?:\/\//, '') || 'this PC') : 'this PC');
+    el.innerHTML = '🟢 Full songs ready — YouTube bridge online (' + where + ')';
+    el.className = 'sp-bridge ok';
+  } else {
+    const rl = /403|BOT/i.test(res.reason || '');
+    el.innerHTML = rl
+      ? '🟡 Bridge online — YouTube is rate-limiting right now; searches auto-retry. Free catalogs play full meanwhile.'
+      : '🟡 Bridge online — YouTube having trouble' + (res.reason ? ' (' + res.reason + ')' : '') + '; searches auto-retry. Free catalogs play full.';
+    el.className = 'sp-bridge';   // neutral — the bridge IS reachable
   }
 }
 function closeSearch(){ searchPanel.classList.remove('show'); }
@@ -4959,7 +4996,7 @@ const AudioCache = (() => {
   return { get, put, clear, size };
 })();
 function cacheKeyFor(src, r){
-  if(src === 'youtube'){ const m = /[?&]id=([\w-]+)/.exec((r.previews && r.previews.youtube) || ''); if(m) return 'yt:' + m[1]; }
+  if(src === 'youtube'){ const p = (r.previews && r.previews.youtube) || ''; const m = /(?:[?&]id=|^ytembed:)([\w-]+)/.exec(p); if(m) return 'yt:' + m[1]; }
   return src + ':' + trackKey(r);
 }
 // fetch audio with YouTube-aware retry/back-off (the bridge returns an empty 200 when yt-dlp is 403-rate-limited)
@@ -4985,6 +5022,7 @@ function prefetchNext(){
     const ni = qIndex + 1; if(ni >= queue.length) return;
     const r = queue[ni]; if(!r || !r.previews) return;
     const s = ENGINES.map(e => e.id).find(id => r.previews[id]); if(!s) return;
+    if(s === 'youtube' && String(r.previews.youtube || '').indexOf('ytembed:') === 0) return;   // v77: embed rows play via the IFrame; nothing to audio-prefetch
     const key = cacheKeyFor(s, r);
     AudioCache.get(key).then(hit => {
       if(hit) return;
@@ -5045,13 +5083,37 @@ const ENGINES = [
   // YouTube — FULL tracks via the local companion bridge (see youtube-bridge/). When the
   // bridge URL is set + running, this turns "search any song, full length" on.
   { id:'youtube', label:'YOUTUBE', kind:'full', async search(term){
-      // base '' = same origin (the dev server serves /search + /audio itself); a full URL
-      // points at a standalone youtube-bridge instead.
-      const base = (cfg.bridgeUrl || '').replace(/\/$/, '');
-      const j = await (await fetch(base + '/search?q=' + encodeURIComponent(term))).json();
-      return (Array.isArray(j) ? j : []).map(t => ({
+      // v77 PRODUCT PIVOT: two YouTube paths.
+      //  • BRIDGE (personal desktop): the local yt-dlp bridge streams audio -> full DETERMINISTIC pre-scan.
+      //  • EMBED (the shippable product): search via the shared Cloudflare proxy, PLAY in YouTube's official
+      //    IFrame player + mic-reactive visuals -> legal, no PC, no per-user infra, app-store-safe.
+      // cfg.ytMode 'auto' picks bridge when one is reachable, else embed. 'bridge'/'embed' force it.
+      let base = RESOLVED_BRIDGE;
+      if(base === null && !_bridgeProbedNone){ const r = await resolveBridge(); base = r.reached ? r.base : null; }   // v77: don't re-probe every search once we know there's no bridge (store users)
+      const forced = (cfg.ytMode === 'bridge' || cfg.ytMode === 'embed');
+      const mode = forced ? cfg.ytMode : (base !== null ? 'bridge' : 'embed');
+      if(mode === 'bridge' && base !== null){
+        base = base.replace(/\/$/, '');
+        let j = null;
+        try { j = await (await fetch(base + '/search?q=' + encodeURIComponent(term))).json(); }
+        catch(_){ RESOLVED_BRIDGE = null; }             // bridge died mid-session -> re-discover next; fall through to embed
+        const arr = Array.isArray(j) ? j : [];
+        if(arr.length || forced) return arr.map(t => ({  // forced-bridge respects an empty result; AUTO falls through to embed below
+          title:t.title, artist:t.artist || '', album:'', art:t.thumb || '',
+          source:'youtube', preview: base + '/audio?id=' + encodeURIComponent(t.id) }));
+        // AUTO + bridge returned nothing (YouTube 403'd yt-dlp this moment) -> fall through to the EMBED proxy so YouTube still works.
+      }
+      if(forced && cfg.ytMode === 'bridge') return [];   // v77 (M2): forced BRIDGE but none reachable/it 403'd -> respect the explicit choice; do NOT silently embed
+      // EMBED: the generalistic path — the shared search proxy + the IFrame player (loadTrackObj routes 'ytembed:').
+      const proxy = (cfg.ytProxy || 'https://atlas-yt-proxy.nathanolson65.workers.dev').replace(/\/$/, '');
+      if(!proxy) return [];
+      let j;
+      try { j = await (await fetch(proxy + '/yt/search?q=' + encodeURIComponent(term))).json(); }
+      catch(_){ return []; }
+      if(!Array.isArray(j)) return [];                   // proxy returned {error:…} (quota/misconfig) -> catalogs still work
+      return j.map(t => ({
         title:t.title, artist:t.artist || '', album:'', art:t.thumb || '',
-        source:'youtube', preview: base + '/audio?id=' + encodeURIComponent(t.id) }));
+        source:'youtube', preview: 'ytembed:' + t.id }));
   }},
 ];
 
@@ -5220,6 +5282,14 @@ async function loadTrackObj(r){
   const PRIORITY = ['audius', 'internetarchive', 'jamendo', 'youtube'];   // full-song sources only
   const order = PRIORITY.filter(s => r.previews && r.previews[s]);
   for(const s of order){
+    if(s === 'youtube'){                                   // v77 PRODUCT: a YouTube-embed row plays in YouTube's own IFrame + mic (no bridge/PCM). CC/file sources rank higher -> deterministic when available.
+      const pv = (r.previews && r.previews.youtube) || '';
+      if(pv.indexOf('ytembed:') === 0){
+        await playYouTubeEmbed(pv.slice(8), r.title, r.artist, r.art);
+        pushRecent(r); renderPlaylists(); extractAlbumHue(r.art);
+        return;
+      }
+    }
     try{
       const key = cacheKeyFor(s, r);
       let ab = await AudioCache.get(key);                        // ⚡ instant replay if we've played it before
@@ -6189,7 +6259,7 @@ $('setLang').onchange = () => { cfg.lang = $('setLang').value; saveCfg(); applyL
 $('setJamendo').value = cfg.jamendoKey || '';
 $('setJamendo').oninput = () => { cfg.jamendoKey = $('setJamendo').value.trim(); saveCfg(); if(enabledEngines) enabledEngines.add('jamendo'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
 $('setBridge').value = cfg.bridgeUrl || '';
-$('setBridge').oninput = () => { cfg.bridgeUrl = $('setBridge').value.trim(); saveCfg(); if(enabledEngines) enabledEngines.add('youtube'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
+$('setBridge').oninput = () => { cfg.bridgeUrl = $('setBridge').value.trim(); RESOLVED_BRIDGE = null; _bridgeProbedNone = false; cfg._bridgeResolved = ''; saveCfg(); if(enabledEngines) enabledEngines.add('youtube'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
 $('randBtn').addEventListener('click', () => { setMode(randomMode()); haptic(); toast('Mode: ' + mode); });
 $('surpriseBtn') && $('surpriseBtn').addEventListener('click', () => {
   cfg.autoVJ = true; cfg.autocycle = true; cfg.transitions = true; saveCfg(); applyCfgToUI();
@@ -6399,7 +6469,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v77';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
