@@ -430,6 +430,7 @@ body.yt-live #ui{width:58vw;}                                        /* keep the
 /* hidden HUD (auto-hide / immersive) */
 #ui.hud-hidden .hud,#ui.hud-hidden .top{opacity:0;transform:translateY(0);transition:opacity .4s;pointer-events:none;}
 #ui.hud-hidden .hud{transform:translateY(20px);}
+#ui.hud-hidden .hud *,#ui.hud-hidden .top *{pointer-events:none;}   /* AUDIT Step 7: beat line-69's pointer-events:auto so invisible controls (LASER ONLINE / play / seek / sliders) can't be actuated while hidden — the reveal tap falls through to the canvas */
 
 /* larger touch targets */
 body.big button,body.big .pill,body.big .tool{min-height:50px;}
@@ -1731,7 +1732,7 @@ function drawBursts(){
    plus a uniform bus (bass/mid/treble/kick/onset/beat/centroid + the app palette). Each GL effect renders
    to an offscreen GL canvas, then ctx.drawImage()'d into the 2D pattern target so it STILL flows through
    the cube refraction / pyramid / post-FX. Lazy-init; if WebGL2 is absent it shows a 2D notice. */
-let _glcv=null, GL=null, _glOK=null, _glw=0, _glh=0, _glAudioTex=null, _glAudioBuf=null, _glVAO=null;
+let _glcv=null, GL=null, _glOK=null, _glw=0, _glh=0, _glAudioTex=null, _glAudioBuf=null, _glVAO=null, _glLost=false;
 const _glProgs={};
 const GL_VERT = `#version 300 es
 layout(location=0) in vec2 p; void main(){ gl_Position=vec4(p,0.,1.); }`;
@@ -1746,9 +1747,14 @@ vec3 hsl2rgb(vec3 c){ vec3 r=clamp(abs(mod(c.x*6.+vec3(0.,4.,2.),6.)-3.)-1.,0.,1
 vec3 pal(float h){ return hsl2rgb(vec3(fract((uHue/360.)+h), clamp(uSat/100.,0.,1.), clamp(uLight/100.,0.05,0.96))); }
 `;
 function glInit(){
+  if(_glLost) return false;                 // AUDIT Step 1: context lost — bail every GL path until webglcontextrestored rebuilds resources
   if(_glOK!==null) return _glOK;
   try{
-    _glcv=document.createElement('canvas'); _glcv.width=64; _glcv.height=64;
+    if(!_glcv){
+      _glcv=document.createElement('canvas'); _glcv.width=64; _glcv.height=64;
+      _glcv.addEventListener('webglcontextlost', e=>{ e.preventDefault(); _glLost=true; }, false);   // preventDefault() is what makes the context restorable
+      _glcv.addEventListener('webglcontextrestored', _glOnRestored, false);
+    }
     GL=_glcv.getContext('webgl2',{antialias:false, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:false, powerPreference:'high-performance'});
     if(!GL){ _glOK=false; return false; }
     GL.getExtension('EXT_color_buffer_float'); GL.getExtension('OES_texture_float_linear');
@@ -1764,6 +1770,16 @@ function glInit(){
     _glOK=true;
   }catch(e){ _glOK=false; }
   return _glOK;
+}
+// AUDIT Step 1: on GPU context restore, drop every cached GL object so the lazy creators rebuild on the SAME _glcv
+// (glInit reuses the existing canvas). Covers all 12+ GPU modes, GENESIS weights, the Bessel LUT, and the 3 FBO sims.
+function _glOnRestored(){
+  _glLost=false; _glOK=null;                                  // force glInit to re-acquire the context + rebuild VAO/audio-tex
+  for(const k in _glProgs) delete _glProgs[k];                // recompile all shader programs
+  _glVAO=null; _glAudioTex=null; _glAudioBuf=null; _glw=0; _glh=0;
+  _genWtex=null; _genWtexUploaded=-1; _genWeightSeed=null;    // GENESIS weight texture (CPU _genWbuf kept)
+  _cymLUTtex=null;                                            // Bessel LUT texture (CPU _cymLUT kept -> re-uploaded)
+  _rd=null; _fl=null; _pt=null;                               // grayscott / fluid / curlflow FBO sims re-setup on next draw
 }
 function glProg(key, fragBody){
   const cached=_glProgs[key]; if(cached) return cached.err?null:cached;
@@ -1807,7 +1823,7 @@ let _glMsgT=0;
 function glNotice(msg){ ctx.fillStyle='#0a0a0c'; ctx.fillRect(0,0,W,H); ctx.fillStyle=hsl(t*30,0.8); ctx.font='600 '+Math.min(28,W*0.04)+'px -apple-system,Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowBlur=0; ctx.fillText(msg, W/2, H/2); ctx.textAlign='left'; }
 // render a single-pass GL fragment effect, then composite into the 2D pattern target (ctx)
 function glDrawSingle(fragBody, key, tt, cb){            // + optional cb(P): extra uniform uploads (GENESIS)
-  if(!glInit()){ glNotice('WebGL2 unavailable on this device'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'WebGL2 unavailable on this device'); return; }
   glResize();
   const P=glProg(key, fragBody);
   if(!P){ const e=_glProgs[key]&&_glProgs[key].err; glNotice('shader error: '+key); return; }
@@ -2026,7 +2042,7 @@ function genSongTime(tt){
 }
 function drawGLGenesis(tt){
   if(cfg.genMode === 'cymatic') return drawGLCymatic(tt);
-  if(!glInit()){ glNotice('GENESIS needs WebGL2 — try another pattern'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'GENESIS needs WebGL2 — try another pattern'); return; }
   const seed = _genCurrentSeed();
   if(seed !== _genWeightSeed) genSnapLatent();
   _genEnsureWtex(seed);
@@ -3288,7 +3304,7 @@ function buildCymCoef(){
 }
 
 function drawGLCymatic(tt){
-  if(!glInit()){ glNotice('CYMATIC needs WebGL2 — try another pattern'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'CYMATIC needs WebGL2 — try another pattern'); return; }
   const seed = _genCurrentSeed();
   if(seed !== _cymSeed){ _cymSeed = seed; _genSnap = true; _cgSnap = true; }   // snap field + brain on seed change
   _cymEnsureLUT();
@@ -4254,7 +4270,7 @@ function rdSeeds(P, active){
   }
 }
 function drawRD(tt){
-  if(!glInit()){ glNotice('WebGL2 unavailable on this device'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'WebGL2 unavailable on this device'); return; }
   glResize();
   if(!_rd || _rd.dispW!==W || _rd.dispH!==H) rdSetup();
   const g=GL, Psim=glProgVF('rd_sim',GL_VERT,GLF['grayscott/grayscott_sim']);
@@ -4294,7 +4310,7 @@ function flSetup(){
   g.bindFramebuffer(g.FRAMEBUFFER,null);
 }
 function drawFluid(tt){
-  if(!glInit()){ glNotice('WebGL2 unavailable on this device'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'WebGL2 unavailable on this device'); return; }
   glResize();
   if(!_fl) flSetup();
   const g=GL, TX=1/FL_SW, TY=1/FL_SH, DT=0.15, rb=(playing&&audioReactive);
@@ -4359,7 +4375,7 @@ function ptSetup(){
   g.bindFramebuffer(g.FRAMEBUFFER,null);
 }
 function drawCurl(tt){
-  if(!glInit()){ glNotice('WebGL2 unavailable on this device'); return; }
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU…' : 'WebGL2 unavailable on this device'); return; }
   glResize();
   if(!_pt) ptSetup();
   const g=GL, rb=(playing&&audioReactive);
@@ -6249,6 +6265,7 @@ const _GENESIS_BAKE = {
 let _genesisBakedOnce = false;
 function applyGenesisBake(){
   for(const k in _GENESIS_BAKE) cfg[k] = _GENESIS_BAKE[k];   // shared keys (symmetry/palette/brightness) are deliberately NOT baked — the user keeps those
+  cfg.genesis = true;   // AUDIT Step 2: every genesis entry (toggle / dropdown / surprise / swipe) marks the persistence flag, so the boot reconcile (respecting `&& cfg.genesis`) restores it consistently for ALL entry paths
   _genesisBakedOnce = true;
   try{ if(typeof saveCfg==='function') saveCfg(); }catch(_){}
   try{ if(cfg.cymSongDNA && typeof dnaEnsureScan==='function') dnaEnsureScan(); }catch(_){}
@@ -6745,7 +6762,7 @@ function applyCfgToUI(){
   [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymSongDNA','cymSongDNA'],['swCymGnosis','cymGnosis'],['swCymDNAv2','cymDNAv2'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
-  { const onC = cfg.genMode === 'cymatic';
+  { const onC = cfg.genMode === 'cymatic' && cfg.genesis;   // AUDIT Step 2: respect the persisted genesis toggle — boot only re-asserts genesis if it was LEFT on (genMode alone stuck the app in genesis forever, the v79 regression)
     const el = $('swCymatic'); if(el) el.classList.toggle('on', onC);
     if(onC){ cfg.genesis = true; const sg = $('swGenesis'); if(sg) sg.classList.add('on');
       if(typeof mode!=='undefined' && mode !== 'genesis'){ _genPrevMode = mode; setMode('genesis'); } } }
@@ -6809,7 +6826,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v79';
+const APP_VERSION = 'v80';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
