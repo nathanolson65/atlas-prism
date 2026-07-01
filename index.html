@@ -46,6 +46,18 @@ button,.pill{
    effectively invisible while still "rendered" so mobile browsers keep it playing (display:none would pause). */
 #ytembed{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.01;}
 #ytembed iframe{width:100%;height:100%;border:0;}
+/* S2: VISIBLE YouTube companion layout (Apple 2.5 / Juno rule — the official player is shown ≥200×200 and the
+   cymatic canvas renders BESIDE it, never overlaid on top of it). body.yt-live is toggled on while a YouTube
+   embed is the active source; every other source keeps the immersive full-viewport canvas unchanged. */
+body.yt-live #ytembed{opacity:1;pointer-events:auto;z-index:2;background:#000;box-shadow:0 0 40px rgba(0,0,0,.6);}
+body.yt-live #ytembed{inset:0 0 0 auto;width:42vw;}                 /* landscape / desktop: player = right pane, full height */
+body.yt-live #ui{width:58vw;}                                        /* keep the whole HUD in the canvas column, never under the player */
+@media (max-aspect-ratio:1/1){                                       /* portrait / phone: player = top pane, canvas + HUD below */
+  body.yt-live #ytembed{inset:0 0 auto 0;width:auto;height:46vh;}
+  body.yt-live #ui{width:100%;padding-top:46vh;}
+}
+/* NOTE: #viz is a REPLACED element (canvas) — left/right insets resolve to its intrinsic buffer size, not the box —
+   so the companion-mode canvas rect is driven from JS (resize()) with an explicit width/height, mirroring 42vw/46vh. */
 
 /* ---------- overlay ---------- */
 #ui{
@@ -380,6 +392,15 @@ button,.pill{
   border-radius:20px;padding:5px 12px;transition:transform .25s;pointer-events:none;}
 .offline.show{transform:translateX(-50%) translateY(0);}
 
+/* v78 Phase 1b: persistent "listening" indicator (Apple 2.5.14 — visible while the mic is active) */
+#micIndicator{position:fixed;top:calc(var(--sat) + 6px);left:50%;transform:translateX(-50%);z-index:9;display:none;align-items:center;gap:7px;padding:5px 13px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.02em;background:rgba(255,60,90,.16);color:#ff6b86;border:1px solid rgba(255,60,90,.45);backdrop-filter:blur(8px);pointer-events:none;}
+#micIndicator.on{display:flex;}
+/* Phase 2: honest "metadata figure (no audio decode)" badge — stacked just below the mic indicator */
+#mdBadge{position:fixed;top:calc(var(--sat) + 36px);left:50%;transform:translateX(-50%);z-index:9;display:none;align-items:center;padding:4px 11px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.02em;background:rgba(120,150,255,.14);color:#a9bcff;border:1px solid rgba(120,150,255,.4);backdrop-filter:blur(8px);pointer-events:none;white-space:nowrap;}
+#mdBadge.on{display:flex;}
+#micIndicator .mic-dot{width:7px;height:7px;border-radius:50%;background:#ff3b5c;box-shadow:0 0 8px #ff3b5c;animation:micpulse 1.15s ease-in-out infinite;}
+@keyframes micpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+
 /* ---------- onboarding / help ---------- */
 .modal{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:24px;
   opacity:0;pointer-events:none;transition:opacity .25s;}
@@ -638,6 +659,10 @@ body.reduce .livedot{animation:none;}
       <input class="sel" id="setBridge" type="text" inputmode="url" placeholder="blank = this PC · or https://prism-bridge.your-tailnet.ts.net" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%">
       <div class="row" id="bridgeWarn" style="display:none"><label class="sub" style="color:var(--a)">⚠ This page is served over HTTPS, so an <b>http://</b> bridge will be blocked (mixed content). Use a same-origin or <b>https://</b> bridge — e.g. a Cloudflare tunnel. See youtube-bridge/README.md.</label></div>
       <div class="row"><button class="pbtn" id="connectBtn" style="width:100%">📱 Connect phone — stream full songs (QR)</button></div>
+      <div class="row"><label>YouTube playback <span class="sub">(Embed = YouTube’s official player, mic-reactive — the no-setup default for phones &amp; the shippable path. Auto = use your bridge if reachable (full deterministic decode), else embed. Bridge = force your personal PC bridge.)</span></label></div>
+      <select class="sel" id="setYtMode" style="width:100%"><option value="auto">Auto — bridge if available, else embed</option><option value="embed">Embed player (mic-reactive)</option><option value="bridge">Bridge only (personal PC)</option></select>
+      <div class="row"><label>YouTube search proxy <span class="sub">(the shared search service; leave blank for the default unless you host your own Cloudflare Worker)</span></label></div>
+      <input class="sel" id="setYtProxy" type="text" inputmode="url" placeholder="https://atlas-yt-proxy.nathanolson65.workers.dev" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%">
       <div class="row"><label>Jamendo client ID <span class="sub">(free key → adds the Jamendo full-track catalog)</span></label></div>
       <input class="sel" id="setJamendo" type="text" inputmode="text" placeholder="paste your Jamendo client_id" autocomplete="off" autocapitalize="none" style="width:100%">
       <div class="row"><label>Audio cache <span class="sub" id="cacheSize">— cached tracks replay instantly &amp; the next track prefetches</span></label><button class="pbtn" id="cacheClear" style="flex:0 0 auto;min-width:96px">Clear</button></div>
@@ -720,6 +745,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>◈ — Sync sensitivity <span class="sub">(how hard the figure tracks frequency: low = subtle, high = dramatic morphing; 50 = default)</span></label><input type="range" class="prng" id="setCymSync" min="0" max="100" value="50"></div>
       <div class="row"><label>◈ — Lead / melody sync <span class="sub">(v68: bias the figure toward the mid/upper-mid LEAD register so a melodic lead — guitar/horn/synth/vocal — reshapes the mandala, not just the drums+bass; 0 = off)</span></label><input type="range" class="prng" id="setCymLead" min="0" max="100" value="0"></div>
       <div class="row"><label>🧬 DNA Song Decoder <span class="sub">(v69 — the LEAP: pre-scan the WHOLE song once → drive the cymatics from its DNA. Shape follows the spectrum, density + brightness follow the song's structure, drops PUNCH, build-ups anticipate. ONE toggle — turn your other sync sliders down and just flip this on; your presets stay untouched. Needs a streamed/file song, not the YouTube-embed or mic.)</span></label><div class="sw" id="swCymSongDNA"></div></div>
+      <div class="row"><label>◐ — Metadata DNA <span class="sub">(Phase 2 — extends the decoder to sources with NO decodable audio: YouTube, mic, streaming. Synthesizes a reproducible figure from the song's IDENTITY + free metadata — tempo/genre/mood via Deezer + iTunes — so every source gets a correctly-colored, correctly-paced mandala; the device mic adds live MOTION on top. Real files/streams still use the full decode above (they always win). Works with or without the decoder on. Shows a ◐ "metadata figure" badge.)</span></label><div class="sw" id="swCymMetaDNA"></div></div>
       <div class="row"><label>🧬 — Complexity range <span class="sub">(v71 — how hard musical INTENSITY drives pattern complexity: delicate few-ring verse → dense crisp BassForge-grade mandala at the drop. Needs DNA on. 0 = v70 gentle; 70 = dramatic verse↔drop contrast; 100 = brutal.)</span></label><input type="range" class="prng" id="setCymComplexity" min="0" max="100" value="70"></div>
       <div class="row"><label>🌀 Gnosis ending <span class="sub">(v74 — after the song resolves (the last drop into its outro, or a wind-down/fade) the figure CRYSTALLIZES into a still, complete mandala — the song's true form held as 'completion'. The kaleidoscope slows and locks over ~8–16s into the whole-song fingerprint, colored by the song's tonic, then breathes once like a singing bowl. Needs Song DNA on. Relentless tracks with no outro stay live.)</span></label><div class="sw" id="swCymGnosis"></div></div>
       <div class="row"><label>🌀 — Gnosis hold <span class="sub">(how COMPLETE the freeze is: 0 = barely settles, 100 = fully static held mandala. ~60 = a clear arrival that still breathes.)</span></label><input type="range" class="prng" id="setCymGnosisHold" min="0" max="100" value="60"></div>
@@ -814,6 +840,20 @@ body.reduce .livedot{animation:none;}
   </div>
 </div>
 
+<!-- v78 Phase 1b: mic consent (Apple 2.5.14 pre-permission explainer) -->
+<div class="modal" id="micConsent">
+  <div class="card">
+    <h2>🎙 Reactive visuals</h2>
+    <p>To make the light-show react to what's playing — YouTube, Spotify, or any audio — ATLAS listens through your <b>microphone</b>.</p>
+    <p>The sound is analyzed <b>on your device, in real time</b>. It is <b>never recorded, saved, or sent anywhere</b>.</p>
+    <button class="cta" id="micConsentOk">Allow reactive visuals</button>
+    <button class="skip" id="micConsentSkip">Not now</button>
+  </div>
+</div>
+<!-- persistent "listening" indicator, shown whenever the mic is active -->
+<div id="micIndicator"><span class="mic-dot"></span>Listening — audio stays on your device</div>
+<div id="mdBadge">◐ metadata figure · from song info + mic</div>
+
 <div class="modal" id="connectModal">
   <div class="card">
     <h2>📱 Play on your phone</h2>
@@ -840,13 +880,38 @@ const mainCtx = ctx;
 let W = 0, H = 0;
 
 function resize(){
+  // S2: in the visible-YouTube companion layout the canvas occupies only a sub-rect BESIDE the player. Because a
+  // <canvas> is a replaced element (left/right insets resolve to its intrinsic buffer size, not the box), the rect
+  // is computed here and applied as explicit inline width/height + top/left. Split mirrors the #ytembed CSS: the
+  // player takes 42vw (landscape) / 46vh (portrait), the canvas takes the rest. Otherwise = full viewport, unchanged.
+  if(document.body.classList.contains('yt-live')){
+    const vw = window.innerWidth, vh = window.innerHeight, portrait = vh >= vw;
+    const iw = portrait ? vw : Math.round(vw * 0.58);
+    const ih = portrait ? Math.round(vh * 0.54) : vh;
+    canvas.style.left = '0px';
+    canvas.style.top  = portrait ? Math.round(vh * 0.46) + 'px' : '0px';
+    canvas.style.width  = iw + 'px';
+    canvas.style.height = ih + 'px';
+    W = canvas.width  = Math.max(2, Math.round(iw * RES));
+    H = canvas.height = Math.max(2, Math.round(ih * RES));
+    return;
+  }
   const iw = window.innerWidth, ih = window.innerHeight;
   // RES (1 by default) lets the LITE governor render to a smaller backing store and CSS-upscale.
   // At RES===1 the backing store is innerWidth×innerHeight and no inline style is set → desktop byte-identical.
   W = canvas.width  = Math.max(2, Math.round(iw * RES));
   H = canvas.height = Math.max(2, Math.round(ih * RES));
+  canvas.style.left = ''; canvas.style.top = '';                     // clear any companion-mode offsets
   if(RES !== 1){ canvas.style.width = iw + 'px'; canvas.style.height = ih + 'px'; }
   else { canvas.style.width = ''; canvas.style.height = ''; }
+}
+let _ytLive = false;   // S2: true while the visible-YouTube companion layout is active
+function setYtLive(on){
+  on = !!on;
+  if(on === _ytLive) return;      // idempotent — only reflow on a real transition
+  _ytLive = on;
+  document.body.classList.toggle('yt-live', on);
+  resize();                       // re-measure the canvas box for the new layout
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
@@ -903,7 +968,7 @@ const cfg = Object.assign({
   volume:32, xfade:false, bassGain:100, midGain:100, trebleGain:100, beatThresh:140,
   palette:0, mono:false, symmetry:1, autocycle:false, strobe:false, camera:false,
   haptics:true, wake:false, autohide:false, big:false, reduce:false, lang:'en', jamendoKey:'',
-  bridgeUrl:'', ytProxy:'https://atlas-yt-proxy.nathanolson65.workers.dev', ytMode:'auto', refract:true, transitions:true, blend:false, blendMode:'aurora', blendMix:50,
+  bridgeUrl:'', ytProxy:'https://atlas-yt-proxy.nathanolson65.workers.dev', ytMode:'auto', micConsented:false, refract:true, transitions:true, blend:false, blendMode:'aurora', blendMix:50,
   sat:100, light:62, blendPalette:2, blendHue:60, blendComp:'source-over', blendReverse:true, blendScale:55, customHue:300, customSpread:140, particles:true, feedback:false, shockwave:false, filmgrain:false, beamburst:false,
   pyramid:false, trail:30, pyramidSpin:false, pyramidSides:4, cycleMins:1, transMs:420,
   autoVJ:false, spinSpeed:25, playRate:100, lfo:false, adaptiveQ:true, showFps:false,
@@ -939,6 +1004,9 @@ const cfg = Object.assign({
   cymSync:50,          // #4: 0..100 frequency-tracking aggressiveness (50 = v55 default; low = subtle, high = dramatic morph)
   cymLead:0,           // v68 LEAD/MELODY sync: 0..100 bias the mode-focus toward the mid/upper-mid lead register so a melodic lead steers the figure shape (0 = off, byte-identical)
   cymSongDNA:false,    // v69 DNA SONG DECODER: ONE master toggle — pre-scan the WHOLE song -> Song Map -> conduct the cymatics (shape/density/brightness/punch from the song's DNA; composed + anticipatory + reproducible). Default OFF -> presets untouched.
+  cymMetaDNA:false,    // Phase 2 METADATA-DNA: for keyless sources (YouTube-embed/mic) synthesize a Song Map from hash(songId)+free metadata (Deezer/iTunes) and drive the SAME conductor -> a reproducible, correctly-colored figure on ANY source, mic adds live motion. Real PCM (files/streams) always wins. Default OFF -> byte-identical.
+  metaProxy:'',        // Phase 2 (P3): optional custom CORS proxy for no-JSONP metadata sources (blank = direct JSONP only)
+  metaPreviewScan:false, // Phase 2 (P6): fetch the 30s Deezer/iTunes preview -> OfflineAudioContext -> real partial _dnaScan (highest-fidelity metadata prior). Off = the synthesized map.
   cymGnosis:false,     // v74 GNOSIS ENDING: after the song's resolution (last drop -> outro, or a wind-down/fade) the figure CRYSTALLIZES dynamic->static — settles into a held, complete sacred-geometry mandala (the song's whole-song FINGERPRINT, colored by its tonic) = a felt sense of COMPLETION. Static-but-ALIVE (one ~0.04Hz singing-bowl breath). DETERMINISTIC (pure fn of map+songT, seek-reproducible). Needs Song DNA on. Default OFF -> byte-identical to v73.
   cymGnosisHold:60,    // v74: how COMPLETE the crystallization is — 0 = barely settles (full no-op safety floor), 100 = fully static held mandala. ~60 = a clear arrival that still breathes.
   cymDNAv2:false,      // v74 SE1: route the LIVE figure onto the 8192-FFT parabolic-peak chromaV2/cenV2/keyV2 (accurate key/chroma incl. deep bass). Default OFF = live figure byte-identical v73. (The Gnosis fingerprint ALWAYS uses the accurate v2 fields, independent of this toggle, so each song's held mandala is distinct.)
@@ -2340,6 +2408,157 @@ function cymModeCap(){ return (typeof LITE!=='undefined' && LITE) ? ((typeof dQ=
    Song Map, then CONDUCT the cymatic figure from it (composed + anticipatory + reproducible) — independent
    of every other sync slider. Default OFF -> zero effect on saved presets. FREE classical DSP, deterministic. */
 let _dnaMap=null, _dnaScanId=0, _dnaScanning=false, _dnaProgress=0, _dnaSrcKey='', _dnaErr='';
+let _dnaAct=false;   // Phase 2: "DNA drivers active" = _dnaMap && (cymSongDNA || cymMetaDNA). Recomputed each cymatic frame right after the hook; reduces to (cfg.cymSongDNA && _dnaMap) when cymMetaDNA is OFF -> byte-safe.
+/* ===================== Phase 2 — METADATA-DNA DETERMINISM ENGINE =====================
+   (spec: design/phase2_metadata_dna.md) The visualizer as a pure fn of the song's IDENTITY, not the streaming PCM.
+   For keyless sources (YouTube-embed / mic / none) a _mdMap — schema-identical to _dnaScan's map — is synthesized
+   from hash(songId) + best-available FREE metadata, fed through the EXISTING dnaConduct/buildCymCoef/emoClassify.
+   Real PCM (track/stream) always wins via _dnaKeyFor(). Default-OFF (cfg.cymMetaDNA). The device mic keeps supplying
+   live MOTION via the shared analyser/fBands (metadata owns STRUCTURE, mic owns MOTION). ============================ */
+let _mdMap=null, _mdSrcKey='';
+let _mdJpN=0;
+const _MD_GENRE_BRIGHT = { edm:0.72, electronic:0.68, dance:0.70, house:0.70, techno:0.72, trance:0.74, 'drum':0.80,
+  dubstep:0.80, pop:0.60, rock:0.62, metal:0.85, punk:0.80, 'hip hop':0.50, 'hip-hop':0.50, rap:0.50, 'r&b':0.48,
+  soul:0.46, funk:0.60, jazz:0.50, blues:0.45, classical:0.42, ambient:0.35, folk:0.44, singer:0.5, country:0.50,
+  reggae:0.52, latin:0.62, world:0.55, gospel:0.5, holiday:0.55, soundtrack:0.5, instrumental:0.5 };
+// PCG-ish deterministic stream from a 32-bit seed (matches spec §2.1; independent of the GENESIS _pcg so it can't drift it)
+function _mdRng(seed){ let s=seed>>>0; return ()=>{ s=(s+0x9e3779b9)>>>0; let z=s;
+  z=Math.imul(z^(z>>>16),0x21f0aaad)>>>0; z=Math.imul(z^(z>>>15),0x735a2d97)>>>0; return ((z^(z>>>15))>>>0)/4294967296; }; }
+function _mdBuildGenome(id){
+  const seed=genSeedFromString(id), rnd=_mdRng(seed);
+  const bands=new Float32Array(24), chroma=new Float32Array(12), mfcc=new Float32Array(8);
+  for(let i=0;i<24;i++) bands[i]=rnd();
+  for(let i=0;i<12;i++) chroma[i]=rnd();
+  for(let i=0;i<8;i++)  mfcc[i]=rnd()*2-1;
+  return { seed, bands, chroma, mfcc, spin:rnd(), sym:rnd(), warmBias:rnd(), flowBias:rnd(), gemJit:rnd() }; }
+// Live identity from the platform (YouTube getVideoData / queue row / now-playing text). Transient, no network.
+function _mdNowMeta(){
+  let title='', artist='', duration=0, genre='';
+  try{
+    if(currentSrc==='yt' && typeof _ytPlayer!=='undefined' && _ytPlayer && _ytPlayer.getVideoData){
+      const vd=_ytPlayer.getVideoData(); if(vd){ title=vd.title||''; artist=vd.author||''; }
+      try{ if(_ytPlayer.getDuration) duration=_ytPlayer.getDuration()||0; }catch(_){}
+    }
+    if(!title && typeof queue!=='undefined' && typeof qIndex!=='undefined' && queue[qIndex]){ const t=queue[qIndex]; title=t.title||title; artist=t.artist||artist; }
+    if(!title && typeof npTitle!=='undefined' && npTitle) title=(npTitle.textContent||'').trim();
+    if(!artist && typeof npArtist!=='undefined' && npArtist) artist=((npArtist.textContent||'').split('·')[0]||'').trim();
+  }catch(_){}
+  return { title, artist, duration, genre };
+}
+// Stable per-song id (two uploads of one song share a figure). '' -> no identity -> no metadata figure (mic drives it).
+function _mdSongId(){
+  try{
+    if(currentSrc==='yt' && typeof ytVideoId!=='undefined' && ytVideoId) return 'yt:'+ytVideoId;
+    if(typeof queue!=='undefined' && typeof qIndex!=='undefined' && queue[qIndex]){ const t=queue[qIndex]; if(t.id||t.url) return 'q:'+(t.id||t.url); }
+  }catch(_){}
+  const n=_mdNowMeta();
+  const a=(n.artist||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+  const t=(n.title||'').toLowerCase().replace(/\(.*?\)|\[.*?\]/g,'').replace(/(official|video|audio|lyrics|hd|remaster).*/,'').replace(/[^a-z0-9]+/g,'');
+  return (a||t) ? ('nm:'+a+'-'+t) : '';
+}
+function _mdBright(md, G){
+  let base=0.55; const g=(md.genre||'').toLowerCase();
+  if(g) for(const key in _MD_GENRE_BRIGHT){ if(g.indexOf(key)>=0){ base=_MD_GENRE_BRIGHT[key]; break; } }
+  let year=0; const ym=/(\d{4})/.exec(md.release_date||''); if(ym) year=+ym[1];
+  if(year>1950 && year<2035) base = base*0.78 + 0.22*Math.max(0,Math.min(1,(year-1985)/40));
+  return Math.max(0.28, Math.min(0.90, base*0.85 + 0.15*(G.bands[12]||0.5))); }
+function _mdValence(md, G, bright, bpmNorm){
+  let v = 0.32 + 0.30*bright + 0.22*bpmNorm + 0.16*(G.warmBias||0.5);
+  const g=(md.genre||'').toLowerCase();
+  if(/ambient|classical|blues|soul|folk/.test(g)) v-=0.08;
+  if(/dance|pop|edm|house|latin|reggae|funk/.test(g)) v+=0.08;
+  return Math.max(0,Math.min(1,v)); }
+// The pseudo-Song-Map: shaped EXACTLY like _dnaScan's return (line ~2774), flat-filled (no time-series). dnaConduct/
+// buildCymCoef/emoClassify consume it with zero branching. Deterministic pure fn of (id, md).
+function _mdBuildMap(id, md){
+  md = md || {};
+  const G=_mdBuildGenome(id), HZ=25, NB=24, NM=12;
+  const dur = (md.duration>0 && md.duration<3600) ? md.duration : 210;
+  const n = Math.max(64, Math.min(256, Math.round(dur/2)));    // flat map -> a small frame count suffices (idx clamps); keeps memory light
+  let bpm = (md.bpm>0) ? md.bpm : (90 + Math.round(G.spin*80));
+  while(bpm<70) bpm*=2; while(bpm>180) bpm/=2; bpm=Math.round(bpm);
+  const bpmNorm=Math.max(0,Math.min(1,(bpm-70)/110));
+  const bright=_mdBright(md, G);
+  let E;
+  if(typeof md.gain==='number') E=Math.max(0,Math.min(1,(md.gain+20)/20));
+  else if(md.rank>0)            E=Math.max(0,Math.min(1, md.rank/1000000));
+  else                          E=0.40 + 0.20*(G.bands[0]||0.5);
+  E=Math.max(0,Math.min(1, E*0.8 + 0.2*bpmNorm));
+  let val=(typeof md.valence==='number') ? md.valence : _mdValence(md,G,bright,bpmNorm);
+  const minor=(val<0.45 || (val<0.5 && (G.warmBias||0.5)<0.42)) ? 1 : 0;
+  const tonic=G.seed%12;
+  const key={ tonic, minor, hue:(tonic*30+(minor?180:0))%360 };
+  const keyV2={ tonic, minor, hue:key.hue, confidence:0 };     // low confidence -> _tonal~0 -> no false harmony petals
+  const triad = minor ? [0,3,7] : [0,4,7];
+  const chroma12=new Float32Array(NM);
+  for(let p=0;p<NM;p++) chroma12[p]=0.15*(G.chroma[p]||0.5);
+  for(const iv of triad) chroma12[(tonic+iv)%12]+=0.6;
+  { let s=0; for(let p=0;p<NM;p++) s+=chroma12[p]; if(s>0) for(let p=0;p<NM;p++) chroma12[p]/=s; }
+  const band24=new Float32Array(NB);
+  for(let b=0;b<NB;b++){ const f=b/(NB-1), tilt=Math.exp(-Math.pow((f-bright)/0.34,2));
+    band24[b]=Math.max(0,Math.min(1,(0.25+0.75*tilt)*(0.40+0.90*E)*(0.55+0.90*(G.bands[b]||0.5)))); }
+  { let mx=1e-6; for(let b=0;b<NB;b++) if(band24[b]>mx)mx=band24[b]; for(let b=0;b<NB;b++) band24[b]/=mx; }
+  const arousal=Math.max(0,Math.min(1, 0.55*E + 0.30*bpmNorm + 0.15*bright));
+  const sym=3+Math.round((G.sym||0.5)*5);
+  const rms=new Float32Array(n), cen=new Float32Array(n), flux=new Float32Array(n), intensity=new Float32Array(n),
+        spread=new Float32Array(n), rolloff=new Float32Array(n), skew=new Float32Array(n), kurt=new Float32Array(n),
+        hcdf=new Float32Array(n), lufsST=new Float32Array(n), cenV2=new Float32Array(n);
+  const bands=new Float32Array(n*NB), chroma=new Float32Array(n*NM), chromaV2=new Float32Array(n*NM), tonn=new Float32Array(n*6);
+  const fluxV=0.25+0.4*arousal, intenV=0.35+0.5*E, lufsV=-32+26*E;
+  for(let f=0; f<n; f++){
+    rms[f]=E; cen[f]=bright; cenV2[f]=bright; flux[f]=fluxV; intensity[f]=intenV;
+    spread[f]=bright; rolloff[f]=bright; lufsST[f]=lufsV;
+    const ob=f*NB; for(let b=0;b<NB;b++) bands[ob+b]=band24[b];
+    const oc=f*NM; for(let p=0;p<NM;p++){ chroma[oc+p]=chroma12[p]; chromaV2[oc+p]=chroma12[p]; }
+  }
+  const sections=[{ t0:0, t1:dur, energy:E, label:'body' }];
+  const drops=[];
+  const gnosis={ resolveT:null, rampDur:0, holdT:null, kind:'none', reason:'metadata (no time-series)', fingerprint:null };
+  return { schema:'md', md:true, hz:HZ, n, nb:NB, dur, bpm, key, keyV2, tuning:0,
+    ts:{ rms, cen, flux, bands, chroma, intensity, spread, rolloff, skew, kurt, tonn, hcdf, lufsST, chromaV2, cenV2 },
+    sections, drops, gnosis, _mdVal:val, _mdAro:arousal, _mdBright:bright, _mdSym:sym }; }
+// JSONP fetch (Deezer &output=jsonp / iTunes &callback=) — browser-safe, no CORS. Times out + cleans up.
+function _mdFetchJSONP(url, cbParam){
+  return new Promise((resolve, reject) => {
+    const cb='_mdjp'+(_mdJpN++); let done=false; const sc=document.createElement('script');
+    const cleanup=()=>{ try{ delete window[cb]; }catch(_){ window[cb]=undefined; } if(sc.parentNode) sc.parentNode.removeChild(sc); };
+    window[cb]=(data)=>{ if(done) return; done=true; cleanup(); resolve(data); };
+    sc.onerror=()=>{ if(done) return; done=true; cleanup(); reject(new Error('jsonp')); };
+    setTimeout(()=>{ if(done) return; done=true; cleanup(); reject(new Error('timeout')); }, 6000);
+    sc.src = url + (url.indexOf('?')<0?'?':'&') + cbParam + '=' + cb;
+    document.head.appendChild(sc); }); }
+// Cascading resolver: Tier-1 (platform title/artist) -> Tier-2 Deezer bpm/gain (duration-guarded) -> Tier-1b iTunes genre.
+// Any failure degrades gracefully; determinism NEVER depends on it. Cached in localStorage by id (2nd play = 0 network).
+async function _mdResolve(id){
+  try{ const c=localStorage.getItem('mdres:'+id); if(c) return JSON.parse(c); }catch(_){}
+  const md=Object.assign({}, _mdNowMeta());
+  const clean=s=>(s||'').replace(/\(.*?\)|\[.*?\]/g,'').replace(/(official|video|audio|lyrics|hd|remaster|feat\.?).*/i,'').trim();
+  const artist=clean(md.artist), title=clean(md.title);
+  if(title){
+    try{ const q=encodeURIComponent('artist:"'+artist+'" track:"'+title+'"');
+      const j=await _mdFetchJSONP('https://api.deezer.com/search?q='+q+'&limit=1&output=jsonp','callback');
+      const hit=j&&j.data&&j.data[0];
+      if(hit && (!md.duration || Math.abs((hit.duration||0)-md.duration)<=4)){
+        const t=await _mdFetchJSONP('https://api.deezer.com/track/'+hit.id+'?output=jsonp','callback');
+        if(t && !t.error){ if(t.bpm>0) md.bpm=t.bpm; if(typeof t.gain==='number') md.gain=t.gain;
+          md.release_date=t.release_date||md.release_date; if(t.rank) md.rank=t.rank; if(t.preview) md.preview=t.preview; }
+      } }catch(_){}
+    if(!md.genre){ try{ const j=await _mdFetchJSONP('https://itunes.apple.com/search?term='+encodeURIComponent(artist+' '+title)+'&media=music&entity=song&limit=1','callback');
+      const h=j&&j.results&&j.results[0]; if(h){ md.genre=h.primaryGenreName||''; md.release_date=md.release_date||h.releaseDate; if(h.previewUrl) md.preview=md.preview||h.previewUrl; } }catch(_){} }
+  }
+  try{ localStorage.setItem('mdres:'+id, JSON.stringify(md)); }catch(_){}
+  return md; }
+// Ensure a current _mdMap for the active keyless source: instant genome-only floor, then async metadata enrichment.
+function _mdEnsure(){
+  const id=_mdSongId();
+  if(!id){ return; }
+  if(id===_mdSrcKey && _mdMap) return;
+  _mdSrcKey=id;
+  _mdMap=_mdBuildMap(id, _mdNowMeta());                        // immediate deterministic figure (genome + whatever the platform gave us)
+  _mdResolve(id).then(md=>{ if(_mdSrcKey===id && cfg.cymMetaDNA) _mdMap=_mdBuildMap(id, md); }).catch(()=>{});   // enrich (Deezer bpm/gain, iTunes genre) -> rebuild
+}
+function _mdShowBadge(on){ const el=document.getElementById('mdBadge'); if(el) el.classList.toggle('on', !!on); }   // P7: HONEST fidelity badge — metadata figure, no audio decode
+/* ===================== end Phase 2 METADATA-DNA ===================== */
 let _dnaFoc=0.4, _dnaBright=1, _dnaDensity=0, _dnaPunch=0, _dnaHue=200, _dnaWarm=0, _dnaSection='', _dnaAnticip=0;
 let _dnaCrispL=0, _dnaGlowL=0, _dnaHatL=0, _dnaFlowR=0.35, _dnaHarmL=0;   // v70: textural "virtual-slider" levels conducted from the Song Map (so ONE toggle = a full rich show)
 let _dnaC=0, _cymCEnv=0, _dnaCell=0;   // v71: _dnaC = per-song-normalized + expanded MUSICAL-INTENSITY signal (deterministic, drives geometry complexity); _cymCEnv = its fast-attack/slow-release envelope (amplitude/color); _dnaCell = intensity-driven line->CELL crossfade (delicate lines verse -> filled BassForge mandala at the drop)
@@ -2448,12 +2667,14 @@ function emoClassify(m, idx){
   // AROUSAL (the emotional ENERGY) — octave-FREE + robust: the v71 musical-INTENSITY arc (loudness+flux+entropy+
   // coverage+centroid, percentile-normalized per song) + loudness + brightness. We deliberately do NOT use raw BPM
   // (it suffers tempo-octave errors until SE3's beat grid lands).
-  const aro = Math.max(0, Math.min(1, 0.70*inten + 0.18*loud + 0.12*cen));
+  let aro = Math.max(0, Math.min(1, 0.70*inten + 0.18*loud + 0.12*cen));
+  if(m.md && typeof m._mdAro==='number') aro = Math.max(0, Math.min(1, m._mdAro));   // Phase 2: metadata maps carry a coarse arousal directly (no time-series to infer it from)
   // VALENCE tilt (SOFT) — mode is a WEAK cue (many joyful pop songs are harmonically minor), so lean on brightness +
   // consonance + arousal with only a light mode tilt. Reflected positive by LAW 1 (transmutation, below).
   const valRaw = 0.22*(minor ? -1 : 1) + 0.30*(cen*2 - 1) + 0.30*(conc*2 - 1) + 0.18*(aro*2 - 1);
-  const val    = Math.max(0, Math.min(1, 0.5 + 0.5*Math.abs(valRaw)));
-  const vpos   = valRaw >= 0;
+  let val    = Math.max(0, Math.min(1, 0.5 + 0.5*Math.abs(valRaw)));
+  let vpos   = valRaw >= 0;
+  if(m.md && typeof m._mdVal==='number'){ vpos = m._mdVal >= 0.5; val = Math.max(0, Math.min(1, 0.5 + 0.5*Math.abs(m._mdVal*2 - 1))); }   // Phase 2: metadata valence -> positivity + saturation
   // ENERGY drives WARM(high)<->COOL(low); valence picks the sub-emotion. A negative song lands on the calmer/cooler
   // POSITIVE cousin within its OWN energy band — never a negative render (LAW 1).
   let gems;
@@ -2814,7 +3035,7 @@ function dnaConduct(songT){
 function buildCymCoef(){
   const NB = (typeof fBands!=='undefined' && fBands) ? fBands.length : 24;   // 24
   const liteLoad = (typeof LITE!=='undefined' && LITE && typeof dQ==='number' && dQ < 0.7);
-  const _cxK = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && cfg.cymSongDNA && _dnaMap;   // v71 complexity engine engaged (hoisted: used by foc bias, kDraw, density)
+  const _cxK = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && _dnaAct;   // v71 complexity engine engaged (hoisted: used by foc bias, kDraw, density)
   // 1) SPECTRAL-SYNC mapping (the fix for "the figure stayed the same shape while the Hz changed"):
   //    fBands are log/AGC'd, which FLATTENS the spectrum -> the old contiguous-slice map + rolloff +
   //    resting floor collapsed to modes [0..3] regardless of frequency. Instead: contrast-enhance
@@ -2836,7 +3057,7 @@ function buildCymCoef(){
   const _lead=(typeof cfg.cymLead==='number'?cfg.cymLead:0)/100;
   if(_lead>0){ let ln=0,ld=0; const b1=Math.min(18,NB-1); for(let b=8;b<=b1;b++){ const ce=Math.max(0,(fBands[b]||0)-mn); const w=ce*ce; ln+=b*w; ld+=w; }
     if(ld>1e-6){ const cenLead=(ln/ld)/(NB-1); cenInst = cenInst*(1-_lead*0.7) + cenLead*(_lead*0.7); } }
-  if(cfg.cymSongDNA && _dnaMap){
+  if(_dnaAct){
     cenInst = _dnaFoc;                                  // v69 DNA: live spectral-arc focus
     if(_dnaResolve>0 && _dnaMap.gnosis && _dnaMap.gnosis.fingerprint)
       cenInst = cenInst*(1-_dnaResolve) + _dnaMap.gnosis.fingerprint.foc*_dnaResolve;   // v74 GNOSIS: ease focus -> whole-song focus
@@ -2976,7 +3197,7 @@ function buildCymCoef(){
     if(_cymBloomEnv > 0.15) kDraw += (_cymBloomEnv > 0.5 ? 2 : 1);
   }
   kDraw = Math.min(_cxK ? 7 : CYM_NMODES, kDraw);   // v71: when complexity-driven, hard-cap simultaneous LINE modes at 7 (crisp budget); cell mode (below) may still exceed for the dense CymaScope fill
-  if(cfg.cymSongDNA && _dnaMap && !_cxK && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*2));   // v70 DNA density path — only when the v71 complexity engine is OFF (cymComplexity=0)
+  if(_dnaAct && !_cxK && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_dnaDensity*2));   // v70 DNA density path — only when the v71 complexity engine is OFF (cymComplexity=0)
   // v60 #10: water-cell mode lights MORE modes (denser CymaScope field) — desktop only; soft-gate still bounds runaway.
   // v71: the effective cell (operator slider OR intensity-driven _dnaCell) adds the dense filled-mandala modes — this
   //      is what lets a DROP explode into a BassForge-grade plate (up to ~15 modes) while the LINE budget stays 7.
@@ -3040,11 +3261,24 @@ function drawGLCymatic(tt){
   const songT = genSongTime(tt);                     // DETERMINISTIC song time (seek-snapped)
   _cymLastSongT = songT;
   if(cfg.cymSongDNA){ if(playing){ const _dk=_dnaKeyFor(); if(_dk && _dk!==_dnaSrcKey) dnaEnsureScan(); } dnaConduct(songT); }   // v69 DNA decoder: scan once per NEW scannable source (keyless/failed never re-fire) + conduct from the Song Map
+  if(cfg.cymMetaDNA && !_dnaKeyFor()){ _mdEnsure(); if(_mdMap){ _dnaMap=_mdMap; dnaConduct(songT); } }   // Phase 2: keyless sources (YouTube/mic) get the synthesized metadata map through the SAME conductor; real PCM always wins via _dnaKeyFor()
+  _dnaAct = !!_dnaMap && (cfg.cymSongDNA || cfg.cymMetaDNA);   // Phase 2: gate the DNA drivers for BOTH modes (reduces to `cfg.cymSongDNA && _dnaMap` when cymMetaDNA is off)
+  // Phase 2 (P4) mic-blend: in metadata mode the STRUCTURE is deterministic (geometry from _dnaFoc), but the room mic
+  // lifts the sparkle/glow/crisp LEVELS so the figure comes ALIVE. Additive (never lowers the metadata baseline),
+  // metadata-mode only (real-PCM/DNA path untouched), and only when the mic is actually live.
+  if(cfg.cymMetaDNA && _dnaMap && _dnaMap.md && !_dnaKeyFor() && typeof micStream!=='undefined' && micStream){
+    const mHigh=Math.max(0,Math.min(1,(typeof audioTreble==='number'?audioTreble:0)));
+    const mMid =Math.max(0,Math.min(1,(typeof audioMid==='number'?audioMid:0)));
+    const mFlux=Math.max(0,Math.min(1,(typeof onsetEnv==='number'?onsetEnv:0)));
+    _dnaHatL   = Math.max(_dnaHatL,   Math.min(1, mHigh*0.7));
+    _dnaGlowL  = Math.max(_dnaGlowL,  Math.min(1, mMid*0.5));
+    _dnaCrispL = Math.max(_dnaCrispL, Math.min(1, mFlux*0.6));
+  }
   const _snap0 = _genSnap;                            // v58 #4: capture before buildCymCoef consumes the flag
   const coef = buildCymCoef();                       // consumes _genSnap exactly once
   if(_snap0) _cymPunchEnv = 0;                        // reset the kick-punch envelope on seek/restart/seed change
   let sym = Math.max(1, Math.min(cfg.cymCell>0.001?16:8, (cfg.symmetry|0) || 1));   // v60 🌊: water-cell mode allows up to 16-fold for the dense CymaScope mandala
-  const _cxD = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && cfg.cymSongDNA && _dnaMap;   // v71 complexity engine engaged
+  const _cxD = (typeof cfg.cymComplexity==='number'&&cfg.cymComplexity>0) && _dnaAct;   // v71 complexity engine engaged
   if(_cxD){
     // v71: musical intensity adds symmetry FOLDS (more petals = more mandala complexity into the drop). Deterministic
     //      tier from _dnaC (pure fn of songT -> seek-reproducible); smoothstep flattening near edges damps flicker.
@@ -3114,7 +3348,7 @@ function drawGLCymatic(tt){
     _uPunch = _cymPunchEnv * _punchK * (cfg.refract ? 0.6 : 1);     // attenuate the brighten under refract (3x 'lighter' recombine)
     scale *= (1 - _uPunch*0.16);                                    // smaller scale = bigger figure -> "expands" on the hit
   }
-  if(cfg.cymSongDNA && _dnaMap){                                    // v69 DNA: drops PUNCH + composed BRIGHTNESS, independent of the cymPunch/brightness sliders
+  if(_dnaAct){                                    // v69 DNA: drops PUNCH + composed BRIGHTNESS, independent of the cymPunch/brightness sliders
     const dP=_dnaPunch*(cfg.refract?0.6:1); if(dP>_uPunch){ _uPunch=dP; scale*=(1-_dnaPunch*0.12); }
     _curLight = Math.max(20, Math.min(94, 24 + _dnaBright*46));
     if(_dnaResolve>0){ _uPunch *= (1-_dnaResolve);                  // v74 GNOSIS: no transient expansion once crystallized
@@ -3137,13 +3371,13 @@ function drawGLCymatic(tt){
   _cymFluxS = cymEMA(_cymFluxS, (typeof Q!=='undefined'&&Q&&Q.flux===Q.flux)?Q.flux:0, 0.85, _snap0);
   { const dT=Math.max(0,Math.min(0.1, songT-_cymFlowLastT)); _cymFlowLastT=songT;
     const flowGain=(typeof cfg.cymFlow==='number'?cfg.cymFlow:0)/100*1.4;
-    const _dnaR=(cfg.cymSongDNA&&_dnaMap)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
+    const _dnaR=(_dnaAct)?_dnaFlowR*0.55:0;   // v70 DNA: the song's flux/section/build drives flow even at cymFlow=0 (GEO*, deterministic-at-seek)
     const _cxR=_cxD?_dnaC*0.55:0;                             // v71: intensity accelerates rotation into the drop (deterministic raw _dnaC)
-    const _hmR=(cfg.cymSongDNA&&_dnaMap)?_dnaHarmFlow*0.6:0;   // v72: TONNETZ harmonic motion -> flow (static harmony = still figure; moving chords = it flows; deterministic)
+    const _hmR=(_dnaAct)?_dnaHarmFlow*0.6:0;   // v72: TONNETZ harmonic motion -> flow (static harmony = still figure; moving chords = it flows; deterministic)
     const _gR = (cfg.cymGnosis ? _dnaResolve : 0);                                  // v74 GNOSIS freeze amount
     const _flowRate = (0.35 + _cymFluxS*flowGain + _dnaR + _cxR + _hmR) * (1 - _gR);
     if(_snap0) _cymFlowPh = songT*0.35*(1-_gR); else _cymFlowPh += dT*_flowRate; }
-  const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (cfg.cymSongDNA&&_dnaMap))
+  const _uFlow = (((typeof cfg.cymFlow==='number'?cfg.cymFlow:0)>0) || (_dnaAct))
     ? (_cymFlowPh + (cfg.cymGnosis?_dnaResolve:0)*0.30*Math.sin(songT*0.25)) : 0;   // v74: ~0.04Hz singing-bowl breath (pure songT LFO)
   // (c) perc -> CRISPNESS, (d) harm -> GLOW(+songT breath), (g) hat -> SPARKLE, (i) rms -> BRIGHTNESS — amplitude EMAs
   _cymCrisp  = cymEMA(_cymCrisp,  (typeof percEnv==='number'?percEnv:0),   0.82, _snap0);
@@ -3154,7 +3388,7 @@ function drawGLCymatic(tt){
   // alive figure. The live envelopes (_cymCrisp/_cymGlow/_cymHat) still supply micro-detail; DNA sets the "virtual
   // slider" floor (never below the operator's own slider, so presets are never reduced) PLUS a direct map floor so
   // sustained/quiet passages still glow (the live envelope alone reads dim). All AMP/color class -> live-smoothed OK.
-  const _dnaOn = !!(cfg.cymSongDNA && _dnaMap);
+  const _dnaOn = _dnaAct;
   const _gCrisp = _dnaOn ? Math.max((typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0), _dnaCrispL*100) : (typeof cfg.cymCrisp==='number'?cfg.cymCrisp:0);
   const _gGlow  = _dnaOn ? Math.max((typeof cfg.cymGlow==='number'?cfg.cymGlow:0),  _dnaGlowL*100)  : (typeof cfg.cymGlow==='number'?cfg.cymGlow:0);
   const _gHat   = _dnaOn ? Math.max((typeof cfg.cymHat==='number'?cfg.cymHat:0),    _dnaHatL*100)   : (typeof cfg.cymHat==='number'?cfg.cymHat:0);
@@ -3261,7 +3495,7 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uSymBreath'), _uSymBreath);   // §6: 0 when cymSymBreath=0 -> shader selects v58 kfold (bit-identical)
     g.uniform1f(glU(P,'uSymWobble'), _uSymWobble);
     const _cellEffU = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0);   // v71 line->filled-cell crossfade
-    const _ukMulU = (cfg.cymSongDNA&&_dnaMap) ? (1 + (_cxD?0.6*_dnaC:0) + _dnaSpread*0.30) : 1.0;   // v71 intensity + v72 spread ring-fineness (FULL density = complexity); crispness handled by the v72.2 contour overlay, not by capping. Computed ONCE so shader+laser-SIM can't diverge.
+    const _ukMulU = (_dnaAct) ? (1 + (_cxD?0.6*_dnaC:0) + _dnaSpread*0.30) : 1.0;   // v71 intensity + v72 spread ring-fineness (FULL density = complexity); crispness handled by the v72.2 contour overlay, not by capping. Computed ONCE so shader+laser-SIM can't diverge.
     g.uniform1f(glU(P,'uCell'), _cellEffU);   // v60 🌊 water-cell fill mix
     g.uniform1f(glU(P,'uKMul'), _ukMulU);
     g.uniform1f(glU(P,'uCellGap'), 0.40 - (typeof cfg.cymCellGap==='number'?cfg.cymCellGap:0)/100*0.18);   // v72: cell TRANSPARENCY — 0->0.40 (current, thin gaps) .. 100->0.22 (wide dark gaps = clear complex structure)
@@ -4709,14 +4943,29 @@ function loadStream(url, gen){
     try{ streamEl.playbackRate = (cfg.playRate || 100) / 100; streamEl.src = url; const p = streamEl.play(); if(p && p.catch) p.catch(() => {}); }catch(_){ fail(); }
   });
 }
+function showMicIndicator(on){ const el = document.getElementById('micIndicator'); if(el) el.classList.toggle('on', !!on); }
+// v78 Phase 1b (Apple 2.5.14): explain WHY the mic is used BEFORE the OS prompt, once. Resolves true to proceed.
+function askMicConsent(){
+  return new Promise(res => {
+    if(cfg.micConsented){ res(true); return; }
+    const m = document.getElementById('micConsent'); if(!m){ res(true); return; }
+    const okB = document.getElementById('micConsentOk'), skipB = document.getElementById('micConsentSkip');
+    const done = (ok) => { m.classList.remove('show'); if(okB) okB.onclick = null; if(skipB) skipB.onclick = null; if(ok){ cfg.micConsented = true; saveCfg(); } res(ok); };
+    if(okB) okB.onclick = () => done(true); if(skipB) skipB.onclick = () => done(false);
+    m.classList.add('show');
+  });
+}
 async function startMic(){
+  if(!cfg.micConsented){ const ok = await askMicConsent(); if(!ok) throw new Error('mic declined'); }   // explicit consent first
   micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   micSource = actx.createMediaStreamSource(micStream);
   micSource.connect(analyser);          // tap only — NOT to destination (avoid feedback)
+  showMicIndicator(true);               // visible "listening" indicator while active
 }
 function stopMic(){
   if(micSource){ try{ micSource.disconnect(); }catch(_){} micSource = null; }
   if(micStream){ micStream.getTracks().forEach(tr => tr.stop()); micStream = null; }
+  showMicIndicator(false);
 }
 
 /* ---- automatic BPM detection: onset-envelope autocorrelation ---- */
@@ -5109,8 +5358,9 @@ const ENGINES = [
       if(!proxy) return [];
       let j;
       try { j = await (await fetch(proxy + '/yt/search?q=' + encodeURIComponent(term))).json(); }
-      catch(_){ return []; }
-      if(!Array.isArray(j)) return [];                   // proxy returned {error:…} (quota/misconfig) -> catalogs still work
+      catch(_){ _ytProxyErr = 'network'; return []; }    // S3: proxy unreachable -> surface a hint, catalogs still work
+      if(!Array.isArray(j)){ _ytProxyErr = (j && j.error) ? String(j.error) : 'error'; return []; }   // S3: proxy returned {error:…} (quota/keyInvalid/rate_limited) -> hint below; catalogs still work
+      _ytProxyErr = '';                                  // S3: a good response clears any prior hint
       return j.map(t => ({
         title:t.title, artist:t.artist || '', album:'', art:t.thumb || '',
         source:'youtube', preview: 'ytembed:' + t.id }));
@@ -5176,8 +5426,18 @@ function renderLinks(term){
 }
 
 let searchGen = 0;   // stale-search guard: only the LATEST search may touch the results DOM
+let _ytProxyErr = '';   // S3: last YouTube search-proxy error reason ('' = ok). Set by the youtube embed engine, surfaced by render().
+function _ytProxyHint(reason){   // S3: map a proxy {error} reason to an honest one-line hint
+  switch(reason){
+    case 'quotaExceeded': return 'YouTube search hit today’s shared quota — try again later. Free catalogs + the “Find on” links below still work.';
+    case 'rate_limited':  return 'Too many YouTube searches right now — wait a moment. Free catalogs still work.';
+    case 'keyInvalid': case 'not_configured': return 'YouTube search is temporarily misconfigured. Free catalogs + the “Find on” links below still work.';
+    default:              return 'YouTube search is temporarily unavailable. Free catalogs + the “Find on” links below still work.';
+  }
+}
 async function doSearch(term){
   if(!term) return;
+  _ytProxyErr = '';   // S3: fresh per search so a stale quota hint never lingers
   if(/youtu\.?be/i.test(term)){ const _ytid = ytIdFrom(term); if(_ytid){ closeSearch(); searchInput.value = ''; playYouTubeEmbed(_ytid, 'YouTube', 'pasted link'); return; } }   // pasted YouTube link → no-PC embed playback (works with the computer OFF)
   term = parseQuery(term);                                    // accept pasted song links
   if(!enabledEngines) enabledEngines = new Set(ENGINES.map(e => e.id));
@@ -5224,6 +5484,11 @@ async function doSearch(term){
       const m = document.createElement('div'); m.className = 'sp-msg';
       m.innerHTML = 'No matches in the active catalogs. Toggle more engines, use a “Find on” link above, or <b>Load file</b>.';
       searchResults.appendChild(m);
+    }
+    if(_ytProxyErr && pending === 0 && active.some(e => e.id === 'youtube')){          // S3: YouTube search failed (quota/etc) -> honest hint, once other engines have settled
+      const yh = document.createElement('div'); yh.className = 'sp-msg'; yh.style.color = 'var(--a)'; yh.style.opacity = '.92';
+      yh.innerHTML = '⚠ ' + _ytProxyHint(_ytProxyErr);
+      searchResults.appendChild(yh);
     }
   };
   render();                                                                          // initial "Searching…" state
@@ -5273,6 +5538,7 @@ async function loadTrackObj(r){
   if(myGen !== loadGen) return;
   currentSrc = 'loading';                  // mid-load: tapping ▶ must NOT start the demo (the "atlas sample" bug)
   _dnaMap=null; _dnaSrcKey=''; _dnaErr=''; _dnaScanning=false; _dnaScanId++;   // v70 DNA: invalidate the Song Map on EVERY new song so a fresh scan always runs (root-fix for same-duration track key collisions)
+  _mdMap=null; _mdSrcKey='';                                                   // Phase 2: invalidate the metadata map too (rebuilt per song id by _mdEnsure)
   playBtn.textContent = '⏳'; playBtn.classList.add('playing');
   npTitle.textContent  = r.title;
   npArtist.textContent = r.artist + ' · loading…';
@@ -5377,6 +5643,7 @@ async function playYouTubeEmbed(videoId, title, artist, art){
   initAudio(); if(actx.state === 'suspended'){ try{ await actx.resume(); }catch(_){} }
   if(myGen !== loadGen) return;
   currentSrc = 'yt'; ytVideoId = videoId; _ytDur = 0;
+  _dnaMap=null; _dnaSrcKey=''; _dnaErr=''; _dnaScanning=false; _dnaScanId++; _mdMap=null; _mdSrcKey='';   // invalidate the PREVIOUS song's DNA/metadata map — the pasted-link path reaches here WITHOUT going through loadTrackObj's reset, so a prior real-track scan would otherwise keep conducting the figure over this YouTube video (YT is keyless -> no re-scan clears it)
   npTitle.textContent  = title || 'YouTube';
   npArtist.textContent = (artist || 'YouTube') + ' · ▶ no-PC embed · 🎤 reacts to room audio';
   sbBpm.textContent = '▶'; playBtn.textContent = '⏳'; playBtn.classList.add('playing');
@@ -5402,6 +5669,7 @@ async function playYouTubeEmbed(videoId, title, artist, art){
     });
   }
   updateMediaSession(title || 'YouTube', artist || '', art);
+  setYtLive(true);                         // S2: reveal the visible player pane immediately (no 1-frame wait for the loop sync)
 }
 
 document.querySelectorAll('.sp-chip[data-src]').forEach(b => {
@@ -5489,6 +5757,8 @@ function loop(){
   try{
   { const _now = performance.now(); if(loop._last==null) loop._last=_now; _dt=(_now-loop._last)/1000; loop._last=_now; if(_dt>DT_CLAMP)_dt=DT_CLAMP; else if(_dt<0)_dt=0; _dtf=_dt*60;
     if(cfg.showFps){ PERF._ring.push(_dt*1000); if(PERF._ring.length>60)PERF._ring.shift(); PERF.maxdt=Math.max.apply(null,PERF._ring); } }
+  if(_ytLive !== (typeof currentSrc!=='undefined' && currentSrc==='yt')) setYtLive(typeof currentSrc!=='undefined' && currentSrc==='yt');   // S2: keep the visible-YouTube companion layout synced to the active source (handles play/pause/switch/stop uniformly)
+  if(typeof _mdShowBadge==='function') _mdShowBadge(cfg.cymMetaDNA && !!_mdMap && !(typeof _dnaKeyFor==='function' && _dnaKeyFor()));   // Phase 2: show the metadata-figure badge only in active metadata mode
   if(_capFps===30){ loop._sk=!loop._sk; if(loop._sk) return; }   // steady-30 terminal state: render every other frame; t still accumulates in finally
   // Render to the offscreen _src whenever we composite to main: always on LITE (mobile composite + bloom rebuild),
   // and on desktop only when the cube refraction is on. refract() then branches: LITE→copy+bloom, else→3-pass split.
@@ -6207,6 +6477,7 @@ bindRange('setCymPunch', 'cymPunch', () => { _cymPunchEnv = 0; });
 bindRange('setCymSync', 'cymSync');
 bindRange('setCymLead', 'cymLead');
 bindSw('swCymSongDNA', 'cymSongDNA', on => { if(on){ if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } else { _dnaMap=null; _dnaScanId++; _dnaScanning=false; _dnaSrcKey=''; _dnaErr=''; _dnaResolve=0; } });   // D2: clear stale resolve when DNA off
+bindSw('swCymMetaDNA', 'cymMetaDNA', on => { if(!on){ if(_dnaMap && _dnaMap.md){ _dnaMap=null; _dnaAct=false; } _mdMap=null; _mdSrcKey=''; } });   // Phase 2: metadata-DNA off -> also drop the _dnaMap alias to the metadata map (else a keyless source with the DNA decoder on keeps driving the stale metadata figure)
 bindSw('swCymGnosis', 'cymGnosis');   // v74: _dnaResolve recomputed each frame from songT -> flips in instantly, no rescan/state reset
 bindRange('setCymGnosisHold', 'cymGnosisHold');
 bindSw('swCymDNAv2', 'cymDNAv2', on => { if(on && cfg.cymSongDNA && _dnaMap && !(_dnaMap.ts && _dnaMap.ts.chromaV2)){ _dnaMap=null; _dnaSrcKey=''; _dnaScanId++; _dnaScanning=false; _dnaErr=''; if(typeof dnaEnsureScan==='function') dnaEnsureScan(); } });   // SE1: re-scan only if an existing map predates SE1
@@ -6260,6 +6531,10 @@ $('setJamendo').value = cfg.jamendoKey || '';
 $('setJamendo').oninput = () => { cfg.jamendoKey = $('setJamendo').value.trim(); saveCfg(); if(enabledEngines) enabledEngines.add('jamendo'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
 $('setBridge').value = cfg.bridgeUrl || '';
 $('setBridge').oninput = () => { cfg.bridgeUrl = $('setBridge').value.trim(); RESOLVED_BRIDGE = null; _bridgeProbedNone = false; cfg._bridgeResolved = ''; saveCfg(); if(enabledEngines) enabledEngines.add('youtube'); renderControls(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); };
+// S4: YouTube mode (auto/embed/bridge) + custom search-proxy — wire the live cfg.ytMode/cfg.ytProxy (were UI-less)
+{ const ym = $('setYtMode'); if(ym){ ym.value = cfg.ytMode || 'auto'; ym.onchange = () => { cfg.ytMode = ym.value; RESOLVED_BRIDGE = null; _bridgeProbedNone = false; saveCfg(); if(enabledEngines) enabledEngines.add('youtube'); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); }; } }
+const _YT_PROXY_DEFAULT = 'https://atlas-yt-proxy.nathanolson65.workers.dev';
+{ const yp = $('setYtProxy'); if(yp){ yp.value = (cfg.ytProxy && cfg.ytProxy !== _YT_PROXY_DEFAULT) ? cfg.ytProxy : ''; yp.oninput = () => { const v = yp.value.trim(); cfg.ytProxy = v || _YT_PROXY_DEFAULT; saveCfg(); if(searchInput.value.trim().length > 1) doSearch(searchInput.value.trim()); }; } }
 $('randBtn').addEventListener('click', () => { setMode(randomMode()); haptic(); toast('Mode: ' + mode); });
 $('surpriseBtn') && $('surpriseBtn').addEventListener('click', () => {
   cfg.autoVJ = true; cfg.autocycle = true; cfg.transitions = true; saveCfg(); applyCfgToUI();
@@ -6469,7 +6744,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
