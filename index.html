@@ -1045,6 +1045,7 @@ const cfg = Object.assign({
   cymCellBloom:0,      // #19 threshold bloom on the brightest cells
   cymIrid:0,           // #20 oil-slick iridescent sheen
   cymEngrave:0,        // v79 ENGRAVED look — harmonic sub-contours + angular striations + organic petals (0 = off, byte-identical v75 outside the Genesis flagship; baked to 45 in _GENESIS_BAKE)
+  cymStable:false,     // v81 CELL STABILITY "structure on rails" — freeze the cell tessellation per SONG (Mang/radK from a per-song intensity base, K punch-decoupled, sym folds fixed, mode SET from the fingerprint, foc section-railed, slow coef EMA); live energy (brightness/crisp/glow/punch/blooms/rotation) untouched. OFF = byte-identical v80. Baked ON in _GENESIS_BAKE.
   cymSyncAll:false,    // v60 MASTER 'Full sync' macro — writes the whole orchestra at balanced gains
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
@@ -2104,6 +2105,11 @@ uniform float uSymBreath;        // v59 §6: kfold mirror-axis rotation (rad). 0
 uniform float uSymWobble;        // v59 §6: fractional kfold-order delta. 0 = v58
 uniform float uCell;             // v60 🌊: antinode-cell water-cymatics fill mix (0 = nodal-LINE view; 1 = bright filled CELLS, dark F=0 boundaries)
 uniform float uKMul;             // v71: radial ring-fineness multiplier (1 = base; >1 = finer concentric bands at high musical intensity)
+uniform float uKMulS;            // v81 STABLE: the STRUCTURAL multiplier for radK/Mang — per-song constant when cymStable, == uKMul otherwise (byte-identical off)
+uniform float uKPunch;           // v81 STABLE: the punch term used ONLY by the K cell-size line — 0 when cymStable (kicks stop resizing cells), == uPunch otherwise
+uniform float uInkFloor;         // v81d INK FLOOR (operator: fine lines must stay SATURATED like the thick ones, not bleed out at intensity) — 0 = the original graceful sub-pixel fades (byte-identical); 1 = fine contours keep near-full darkness until truly unresolvable
+uniform float uFlowB;            // v81e: the band-SCROLL flow (the radial fract-band migration term) — damped 4x in stable mode so the small center-outward lines glide instead of sprinting; == uFlow otherwise (byte-identical). The kfold ROTATION keeps full uFlow.
+uniform float uPlate;            // v81f TECTONIC GEAR PLATES (operator design): per-ring rotation in CELL units — alternate rings counter-rotate like meshed gear wheels (transmission/turbine). 0 = byte-identical. Ring-constant offset -> kfold-seam-safe by construction.
 uniform float uCellGap;          // v72: cell-pattern TRANSPARENCY — the bright antinode-band half-width (lower = WIDER dark nodal gaps = the complex cell structure reads clearly; colors unchanged)
 // v60 FULL-SONG-SYNC + CymaScope uniforms (all 0 / neutral by default -> cymCell=0 byte-identical)
 uniform float uFlow;     // b: deterministic flux flow phase
@@ -2258,18 +2264,19 @@ void main(){
     //   water-cymatics cell tiling (PhD-research: the missing ingredient was angular cell subdivision + a density
     //   FLOOR). NOTE: v74 has NO single-parameter recovery (K/radK/Mang floors differ from v74 at every uCell); the
     //   v74 line view is preserved instead by the uCell>0.001 GATE (this whole block is skipped) -> default byte-identical.
-    float K     = (10.0 + uCell*16.0) * (1.0 - uPunch*0.10);      // v75: |F|-band density FLOOR 10 (was 6) -> dense even when quiet; (f) kick momentarily enlarges the tiles
-    float radK  = (12.0 + uCell*8.0) * uKMul;                     // v75: concentric-ring count, floored 12 (was fixed r*17); uKMul tightens on intense passages
-    float Mang  = floor((10.0 + uCell*10.0) * uKMul + 0.5);       // v75: angular cells per ring (~10 floor .. ~38 at peak uCell*uKMul), INTEGER -> kfold-seam-safe (phase continuous across theta=0)
+    float K     = (10.0 + uCell*16.0) * (1.0 - uKPunch*0.10);     // v75 density floor; v81: uKPunch==uPunch normally, 0 when STABLE (kicks stop resizing every cell)
+    float radK  = (12.0 + uCell*8.0) * uKMulS;                    // v75 ring count; v81: uKMulS==uKMul normally, a per-song CONSTANT when STABLE (rings stop sliding verse-to-drop)
+    float Mang  = floor((10.0 + uCell*10.0) * uKMulS + 0.5);      // v75 angular cells (INTEGER, kfold-seam-safe); v81 STABLE: frozen per song -> the honeycomb never re-tessellates mid-song
     float ringId= floor(aFr*K + r*radK);                          // radial band index (for the brick stagger)
-    float aphase= Mang*ang*0.15915494 + 0.5*mod(ringId, 2.0);     // M cells/rev + half-cell BRICK offset on alternating rings -> staggered HEX honeycomb (soap-bubble read, not graph paper)
+    float aphase= Mang*ang*0.15915494 + 0.5*mod(ringId, 2.0)
+                + (mod(ringId,2.0)*2.0-1.0)*uPlate;               // v81f: alternate ring PLATES counter-rotate (gear mesh) — odd rings drift +, even rings −; slow, mechanical, deterministic
     float angMix= smoothstep(0.06, 0.20, r);                      // fade the angular chop IN past the core -> clean center medallion (no sunburst singularity at r->0)
-    float phase = aFr * K + r * radK - uFlow*1.6 + aphase*angMix; // v75: COMBINED field-bands + rings + honeycomb. (b) flux FLOW scrolls; uKMul tightens further on intense passages
+    float phase = aFr * K + r * radK - uFlowB*1.6 + aphase*angMix; // v75 combined bands + rings + honeycomb; v81e: the scroll uses the DAMPED uFlowB (stable) so the fine radial lines drift with intent instead of racing at the drop
     float fb    = fract(phase);
     float hard  = mix(0.0, 0.05, uCell) + uCrisp*0.02;            // v72.1: weaker loudness coupling so the dark nodal lines keep a CONSISTENT bold width through the song (loud passages no longer thin them toward invisible)
     float fwb   = fwidth(phase) + 1e-4;                           // pixel footprint of the banding -> ANTI-ALIAS: SHARP lines, no grain (smooths to flat where sub-pixel instead of aliasing)
     float _cov  = clamp(((uCellGap + hard) - abs(fb - 0.5))/fwb + 0.5, 0.0, 1.0);   // crisp band when resolved
-    float band  = mix(_cov, clamp(2.0*(uCellGap+hard), 0.0, 1.0), smoothstep(0.22, 0.5, fwb));   // v72.2: when the bands go sub-pixel (dense), converge to the BRIGHT cell-average (not gray 0.5) so dense passages stay bright + saturated, never muddy/dim
+    float band  = mix(_cov, clamp(2.0*(uCellGap+hard), 0.0, 1.0), smoothstep(mix(0.22,0.50,uInkFloor), mix(0.5,0.95,uInkFloor), fwb));   // v72.2 bright-average convergence; v81d: the ink floor pushes the convergence FAR out so the dark gaps persist through the intense rungs instead of flattening to a wash
     float vign  = smoothstep(uDisc+0.04, uDisc-0.30, discR);
     float core  = smoothstep(0.025, 0.10, aFr);   // light cells at lower field too -> vivid across all loudness (not just drops)
     float cell  = band * core * vign;
@@ -2278,8 +2285,8 @@ void main(){
     //   (never aliases/chaos) only when truly sub-pixel. uCellGap*... ties line strength to the operator's transparency knob.
     float _cdist  = abs(fb - 0.5);                                            // 0 at a boundary .. 0.5 mid-cell
     float _contour= (1.0 - smoothstep(0.0, (0.7 + uCellGap*1.2)*fwb, _cdist)) // crisp dark line, width grows a touch with the transparency knob
-                    * (1.0 - smoothstep(0.34, 0.5, fwb));                     // graceful sub-pixel fade-out (no chaos)
-    cell *= (1.0 - _contour * 0.55 * core * vign);                           // thin crisp dark lines (moderate strength so the cells stay bright/colored, not dimmed)
+                    * (1.0 - smoothstep(mix(0.34,0.62,uInkFloor), mix(0.5,0.95,uInkFloor), fwb));   // v81d: fade only when TRULY unresolvable — the fine lattice survives the climax
+    cell *= (1.0 - _contour * mix(0.55, 0.92, uInkFloor) * core * vign);     // v81d: ink-floored contour strength — the fine lines carry near the same black as the thick primaries
     // ===== v79 ENGRAVED cymatic — 3 pure-brightness modulations of cell; phase is UNTOUCHED (laser-SIM parity kept).
     //       All gated by uEngrave (0 => byte-identical). All reuse the shipped crisp-line AA idiom + the angMix r->0 fade.
     if(uEngrave > 0.001){
@@ -2289,16 +2296,16 @@ void main(){
       float _h3  = abs(fract(phase*3.0) - 0.5);
       float _fw2 = fwb*2.0;
       float _fw3 = fwb*3.0;
-      float _e2  = (1.0 - smoothstep(0.0, 0.75*_fw2, _h2)) * (1.0 - smoothstep(0.34, 0.5, _fw2));
-      float _e3  = (1.0 - smoothstep(0.0, 0.75*_fw3, _h3)) * (1.0 - smoothstep(0.34, 0.5, _fw3));
+      float _e2  = (1.0 - smoothstep(0.0, 0.75*_fw2, _h2)) * (1.0 - smoothstep(mix(0.34,0.60,uInkFloor), mix(0.5,0.92,uInkFloor), _fw2));   // v81d: engrave survives density
+      float _e3  = (1.0 - smoothstep(0.0, 0.75*_fw3, _h3)) * (1.0 - smoothstep(mix(0.34,0.60,uInkFloor), mix(0.5,0.92,uInkFloor), _fw3));
       float _etch = (_e2*0.60 + _e3*0.40) * core * vign * angMix;   // strong antinode => engraved; angMix => no beaded center
-      cell *= (1.0 - _etch * 0.42 * uEngrave);                      // DARKEN the nested lines; factor in [0.58,1] => no holes
+      cell *= (1.0 - _etch * mix(0.42, 0.62, uInkFloor) * uEngrave);   // v81d: deeper etch under the ink floor; still bounded (no holes)
       // (b) ANGULAR STRIATIONS — a fine combed grain locked to the honeycomb (integer Mang => kfold-seam-safe),
       //     bent by |F| (aFr) so it curves with the figure instead of a straight sunburst.
       float _striPh = ang*0.15915494*(Mang*3.0) + aFr*0.6;
       float _striFw = fwidth(_striPh) + 1e-4;
       float _stri   = (1.0 - smoothstep(0.0, 1.1*_striFw, abs(fract(_striPh) - 0.5)))
-                    * (1.0 - smoothstep(0.34, 0.5, _striFw));
+                    * (1.0 - smoothstep(mix(0.34,0.60,uInkFloor), mix(0.5,0.92,uInkFloor), _striFw));   // v81d: striations hold their ink through the climb
       cell *= (1.0 - _stri * 0.14 * core * vign * angMix * uEngrave);   // light comb, factor in [0.86,1] => no holes
       // (c) ORGANIC PETAL ENVELOPE — bend the cell READ toward soft lobes (brightness only; does NOT move phase).
       //     Np derived from Mang + ring-parity phase => petals interleave row-to-row; angMix keeps the core round.
@@ -2308,14 +2315,14 @@ void main(){
     }
     cell  = mix(cell, step(0.5, band)*core*vign, uCymFlat);      // #15 flat solid tiles
     cell *= mix(1.0, smoothstep(0.0, 0.025, ang), uSeamAA);      // #16 feather the kfold mirror seam
-    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlow*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp(((uCellGap+0.02)-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp; gap follows uCellGap)
+    if(uMicro > 0.001){ float ph2=aFr*K*2.7 + r*21.0*uKMul - uFlowB*1.6; float fb2=fract(ph2); float fw2=fwidth(ph2)+1e-4; float micro=clamp(((uCellGap+0.02)-abs(fb2-0.5))/fw2+0.5,0.0,1.0)*core*vign; cell=max(cell, cell*0.6 + micro*0.35*uMicro); }   // #11 micro sub-cells (AA'd -> sharp; gap follows uCellGap)
     float men  = max(0.0, (1.0-smoothstep(0.30,0.40,abs(fb-0.5))) - (1.0-smoothstep(0.40,0.48,abs(fb-0.5)))) * core * vign;   // #14 meniscus rim
     float halo = (1.0 - smoothstep(0.18, 0.34, abs(fb-0.5))) * core * vign;                                                   // (d) harm glow skirt
     float ping = (1.0 - smoothstep(0.0, 0.10, abs(r - uPingR))) * uPingA * 0.5;                                               // (e) which ring flashes
     float shock= uPunch * (1.0 - smoothstep(0.0, 0.22, abs(r - fract(uPunch*1.3)))) * 0.25;                                   // (f) kick shockwave
     float spk  = 0.0; if(uCymHat > 0.001 && r > 0.55){ float grn=fract(sin(dot(floor(p*38.0), vec2(12.9898,78.233)))*43758.5453); spk = step(0.82, grn) * (0.5+0.5*sin(uFlow*9.0 + grn*6.2832)) * uCymHat * smoothstep(0.55,0.9,r) * 0.35; }   // (g) hat sparkle (outer rim, deterministic)
     cell *= disc * depthShade * (1.0 + uPunch*0.70) * uBright;    // (i) rms/beat brightness (uBright=1.0 neutral)
-    cell += (halo*uGlow*0.30 + men*uMen*0.45 + ping + shock + spk) * vign;
+    cell += (halo*uGlow*0.30 + men*uMen*0.45 + ping + shock + spk) * vign * mix(1.0, 1.0 - _contour*0.85, uInkFloor);   // v81e: the drop's additive light (glow/shock/sparkle) now RESPECTS the etched lines under the ink floor — color can no longer flood over the fine lattice
     if(uFOL > 0.001 && r < 0.24){ float fol=0.0; for(int i=0;i<6;i++){ float a2=float(i)*1.0472; vec2 c2=vec2(cos(a2),sin(a2))*0.08; fol=max(fol, 1.0-smoothstep(0.072,0.085,length(p-c2))); } fol=max(fol, 1.0-smoothstep(0.072,0.085,length(p))); float fring=fol-(1.0-smoothstep(0.058,0.07,length(p))); cell += max(0.0,fring)*uFOL*0.4*smoothstep(0.24,0.16,r); }   // #17 flower-of-life seed
     ink = mix(ink, cell*0.85, uCell);                            // line view <-> water-cell view
     float rainbow = fract(r*1.5 + aF*0.10);                       // v60 default radial rainbow (uHarm=0)
@@ -2446,8 +2453,73 @@ const _cymPing = new Float32Array(CYM_NMODES);     // §7 decaying per-mode atta
 let _cymPingLast = -1;                             // §7 last pinged band (novelty gate)
 // v60 FULL-SONG-SYNC state: snap-reset amplitude EMAs + the deterministic flow accumulator + stereo auto-range.
 let _cymFluxS=0, _cymFlowPh=0, _cymFlowLastT=0, _cymCrisp=0, _cymGlow=0, _cymHat=0, _cymBright=0, _cymEllip=0, _swLo=1, _swHi=0;
-let _lzUHarm=0, _lzChPhase=0, _lzKeyBase=0.55, _lzKeyWarm=0, _lzUFlow=0, _lzUCell=0;   // v67 laser-color stash (set in drawGLCymatic, read by _lzCellHue) — deterministic copy of the shader's cellHue inputs
+let _lzUHarm=0, _lzChPhase=0, _lzKeyBase=0.55, _lzKeyWarm=0, _lzUFlow=0, _lzUFlowB=0, _lzPlate=0, _lzUCell=0;   // v67 laser-color stash (set in drawGLCymatic, read by _lzCellHue) — deterministic copy of the shader's cellHue inputs; v81e adds the damped band-scroll flow; v81f the gear-plate angle
 let _lzSym=0, _lzCellEff=0, _lzKMul=1;   // v71 laser-GEOMETRY stash: the EXACT deterministic sym folds / effective cell / ring-fineness the shader used this frame, so the laser SIM traces what's rendered
+// ===== v81 CELL STABILITY — "structure on rails" (design/v81_cell_stability.md) =====
+// STRUCTURE (tessellation/symmetry/mode-set/focus) becomes a pure fn of the SONG (map/seed) instead of the live
+// envelopes; ENERGY (brightness/crisp/glow/punch/blooms/rotation) stays live. Per-song fingerprint preserved by
+// construction: every frozen parameter derives from the Song Map, so two songs differ MORE, not less.
+let _cymStab = false;                       // recomputed each cymatic frame: cfg.cymStable && _dnaAct
+const _cymStabWM = new WeakMap();           // per-map cache: { kb (KMULBASE 1..1.5), fold (0..1 sym-fold tier), set (Uint8Array16 mode-set), secs (per-section foc rails) }
+function _cymStabDat(m){
+  if(!m || !m.ts || !m.ts.intensity) return null;
+  let d = _cymStabWM.get(m); if(d) return d;
+  const I = m.ts.intensity, cp = Array.from(I).sort((a,b)=>a-b);
+  const p75 = cp.length ? (cp[Math.min(cp.length-1, Math.floor(cp.length*0.75))] || 0) : 0;   // whole-song intensity p75 = the song's character
+  const kb   = 1.0 + 0.5*Math.max(0, Math.min(1, p75));                                        // KMULBASE 1..1.5 (mirrors the live uKMul range)
+  const fold = p75<=0.30 ? 0 : p75>=0.92 ? 1 : (t=>t*t*(3-2*t))((p75-0.30)/0.62);              // frozen sym-fold tier (same smoothstep the live path used)
+  // MODE SET: top-8 the song is allowed to light — the gnosis fingerprint when present (real scans), else the
+  // map's own mean per-mode band energy (metadata maps; deterministic per song either way).
+  const set = new Uint8Array(CYM_NMODES);
+  let w = null;
+  if(m.gnosis && m.gnosis.fingerprint && m.gnosis.fingerprint.coef) w = m.gnosis.fingerprint.coef;
+  else if(m.ts.bands && m.nb){ w = new Float64Array(CYM_NMODES); const NB=m.nb, o=0;           // frame 0 suffices for flat md maps; real maps average a few frames
+    const nf = Math.min(m.n||1, 32);
+    for(let f=0; f<nf; f++){ for(let k=0;k<CYM_NMODES;k++){ const b0=Math.floor(k*NB/CYM_NMODES), b1=Math.max(b0+1,Math.floor((k+1)*NB/CYM_NMODES));
+      let s=0,c=0; for(let b=b0;b<b1&&b<NB;b++){ s+=m.ts.bands[f*NB+b]||0; c++; } w[k]+= c?s/c:0; } } }
+  if(w){ const ord = Array.from({length:CYM_NMODES},(_,k)=>k).sort((a,b)=>(w[b]||0)-(w[a]||0));
+    for(let r=0;r<8;r++) set[ord[r]]=1; set[0]=1;
+    // v81b ASCENSION guarantee: the ladder's top rungs need fine high-order modes to climb INTO — if the song's
+    // fingerprint set has none in the upper third of the z-ladder, admit the two highest-z modes.
+    let hi3=0; for(let k=11;k<CYM_NMODES;k++) if(set[k]) hi3++;
+    if(hi3<2){ set[CYM_NMODES-1]=1; set[CYM_NMODES-2]=1; } }
+  else set.fill(1);                                                                             // no data -> no restriction
+  // PER-SECTION FOC RAILS: mean centroid + mean treble per section -> the focus target the section holds.
+  const secs = [];
+  if(m.sections && m.ts.cen && m.ts.bands){ const NB=m.nb||24, hz=m.hz||25;
+    for(const s of m.sections){ const f0=Math.max(0,Math.floor(s.t0*hz)), f1=Math.min(m.n, Math.ceil(s.t1*hz));
+      let cs=0, hs=0, n=0;
+      for(let f=f0; f<f1; f++){ cs += m.ts.cen[f]||0; let h=0; for(let b=16;b<NB;b++) h+=m.ts.bands[f*NB+b]||0; hs += h/Math.max(1,NB-16); n++; }
+      secs.push(n ? Math.max(0,Math.min(1,(cs/n)*0.6 + (hs/n)*0.25 + 0.12)) : 0.5); } }
+  // ===== v81b THE ASCENSION LADDER (operator design): the song's JOURNEY plays the role of a RISING Hz sweep. =====
+  // asc[f] = normalized CUMULATIVE intensity (monotonic 0->1; the song EARNS density as it spends energy;
+  // deterministic + seek-safe: pure fn of the frame index). Quantized into RUNGS like a real Chladni plate
+  // jumping to the next eigenmode as the tone rises: each rung HOLDS a crisp fixed structure (focus / ring
+  // density / mode count), then steps UP. Flat metadata maps degrade to a clean linear time-ascension.
+  const RUNGS = 10;
+  const asc = new Float32Array(m.n);
+  { let run=0; for(let f=0; f<m.n; f++){ run += 0.05 + Math.max(0, I[f]||0); asc[f]=run; }      // +0.05 floor: silence still creeps (no dead ladder)
+    const tot=run||1; for(let f=0; f<m.n; f++) asc[f] /= tot; }
+  const rung = new Array(RUNGS);
+  for(let r=0; r<RUNGS; r++){ const u = r/(RUNGS-1);
+    rung[r] = { foc: 0.18 + 0.72*u,                          // _dnaFoc target: big rings -> fine high-order lacework
+                kmul: Math.min(2.0, kb * (0.75 + 0.85*u)),   // v81c: raised ceiling — the top rung reaches the green-CymaScope density (live path max was 1.9)
+                kdraw: 3 + Math.round(4*u),                  // 3 -> 7 simultaneous modes (cell fill below adds the BassForge plate on top)
+                symT: Math.round(6 + 10*u),                  // v81c: VORTEX POINTS climb the ladder — 6 lobes (~100Hz opening) -> 16 (the operator's green-image count at 900+Hz)
+                cell: 0.30 + 0.70*u }; }                     // v81c: water-cell fill climbs to FULL CymaScope at the top (sparse line-figure at the bottom)
+  // v81e COLOR RAILS: per-section dominant PITCH -> a hue offset (dp*6, the same scale _dnaHue used per-frame) so
+  // harmony still paints the figure — but at section speed, slewed, instead of jumping with every chord.
+  const secHue = [];
+  if(m.sections && m.ts.chroma){ const hz=m.hz||25;
+    for(const s of m.sections){ const f0=Math.max(0,Math.floor(s.t0*hz)), f1=Math.min(m.n, Math.ceil(s.t1*hz));
+      const acc=new Float64Array(12); for(let f=f0; f<f1; f++){ const oc=f*12; for(let p=0;p<12;p++) acc[p]+=m.ts.chroma[oc+p]||0; }
+      let dp=0,dv=-1; for(let p=0;p<12;p++) if(acc[p]>dv){dv=acc[p];dp=p;}
+      secHue.push(dp*6); } }
+  d = { kb, fold, set, secs, secHue, asc, rungs:RUNGS, rung };
+  _cymStabWM.set(m, d); return d;
+}
+let _cymAsc=0, _cymRung=0;   // v81b: current ascension amount + rung index (set by dnaConduct each frame; read by buildCymCoef + the uniform block)
+let _cymHueRail=null, _cymSecI=-1;   // v81e COLOR ON RAILS: slewed hue state (tau ~3.3s) + current section index — color moves at song-structure speed, not chord/frame speed
 // canonical snap-reset EMA: snap to instant on seek, else frame-rate-invariant smooth. (amplitude/color/edge class only — never geometry)
 function cymEMA(prev, tgt, base, snap){ return snap ? tgt : prev + (tgt-prev)*(1 - Math.pow(base,(typeof _dtf==='number'&&_dtf>0)?_dtf:1)); }
 // LITE mode-count budget, hoisted so buildCymCoef() can clamp foc into the rendered index window (shader
@@ -3032,12 +3104,22 @@ function dnaConduct(songT){
   for(let b=16;b<NB;b++)      high+=B[o+b]||0;  high/=Math.max(1,NB-16);
   for(let b=19;b<NB;b++)      hat +=B[o+b]||0;  hat /=Math.max(1,NB-19);
   // current section + anticipation/punch from the STRUCTURAL map (lookahead = the thing live audio can't do)
-  let sec=null; for(let i=0;i<m.sections.length;i++){ if(songT>=m.sections[i].t0 && songT<m.sections[i].t1){ sec=m.sections[i]; break; } }
+  let sec=null, _secI=-1; for(let i=0;i<m.sections.length;i++){ if(songT>=m.sections[i].t0 && songT<m.sections[i].t1){ sec=m.sections[i]; _secI=i; break; } }
   const secE=sec?sec.energy:rms; _dnaSection=sec?sec.label:'';
   let antic=0; for(let i=0;i<m.drops.length;i++){ const dt=m.drops[i].t-songT; if(dt>=0 && dt<4) antic=Math.max(antic, 1-dt/4); } _dnaAnticip=antic;
   let punch=0; for(let i=0;i<m.drops.length;i++){ const a=songT-m.drops[i].t; if(a>=0 && a<0.6) punch=Math.max(punch, 1-a/0.6); } _dnaPunch=punch;
   // ----- composed STRUCTURAL drivers (feed geometry + the brightness/color arc) -----
   _dnaFoc    = Math.max(0,Math.min(1, cen*0.6 + high*0.25 + 0.12 + antic*0.18));   // shape: centroid + treble lacework, builds into drops
+  // v81b THE ASCENSION LADDER (operator design): the song's journey plays the role of a RISING Hz sweep — the
+  // figure climbs the cymatic eigenmode ladder as the song progresses. foc HOLDS constant within a rung (a crisp,
+  // readable form, like a plate locked on one eigenmode), then STEPS UP at the next rung (the Chladni jump).
+  // Anticipation is dropped from foc (structural churn); antic still drives brightness/density (the alive channel).
+  if(cfg.cymStable){ const _sd=_cymStabDat(m); if(_sd && _sd.asc){
+    _cymAsc  = _sd.asc[idx] || 0;
+    _cymRung = Math.max(0, Math.min(_sd.rungs-1, Math.floor(_cymAsc * _sd.rungs)));
+    _cymSecI = _secI;                                       // v81e: the color rail follows the SECTION, not the frame
+    _dnaFoc  = _sd.rung[_cymRung].foc;
+  } }
   _dnaBright = Math.max(0,Math.min(1.6, 0.5 + secE*0.55 + rms*0.25 + antic*0.22 + punch*0.45));
   _dnaDensity= Math.max(0,Math.min(1, secE*0.55 + antic*0.45 + punch*0.5 + high*0.2));
   const _useV2 = cfg.cymDNAv2 && m.ts.chromaV2 && m.keyV2;                   // SE1 v2 reads (default-inert if absent)
@@ -3077,7 +3159,7 @@ function dnaConduct(songT){
   // Always-on while a song decodes (no toggle). Color may be live-smoothed (geometry stays a pure fn of map+songT);
   // seek-snap (like _cymCen) keeps it DETERMINISTIC: same song-time -> same color on replay.
   { const e = emoClassify(m, idx);
-    const ac = _genSnap ? 1 : (1 - Math.pow(0.92, (typeof _dtf==='number'&&_dtf>0)?_dtf:1));   // instant on seek, ~smooth in playback
+    const ac = _genSnap ? 1 : (1 - Math.pow(cfg.cymStable ? 0.995 : 0.92, (typeof _dtf==='number'&&_dtf>0)?_dtf:1));   // instant on seek; v81e: the emotion hue glides (~3.3s) in stable mode so color FEELS composed, not beat-twitchy
     let dh = ((e.hueDeg - _emoHue + 540) % 360) - 180; _emoHue = ((_emoHue + dh*ac) % 360 + 360) % 360;   // shortest-arc hue EMA
     _emoSat += (e.sat - _emoSat)*ac; _emoLight += (e.light - _emoLight)*ac;
     _emoVal = e.val; _emoAro = e.aro; }
@@ -3153,7 +3235,7 @@ function buildCymCoef(){
   // v71: musical intensity walks the dominant mode UP the z-sorted Bessel ladder (higher order = finer concentric
   //      lacework). C=0 -> foc unchanged (byte-identical); C=1 -> pulled 50% toward the top order. This is how a
   //      drop gets fine filigree at fixed kDraw — the "spend the upper dynamic range on finer single modes" rule.
-  if(_cxK) foc = Math.min(cymModeCap()-1, foc + 0.50*_dnaC*((CYM_NMODES-1)-foc));
+  if(_cxK && !_cymStab) foc = Math.min(cymModeCap()-1, foc + 0.50*_dnaC*((CYM_NMODES-1)-foc));   // v81b: the live intensity->foc boost would fight the ladder — the rung owns foc when stable
   // Special-case the default so sync=50 reproduces the v55 LITERALS exactly (no ~1-ULP float drift), then ramp.
   const sigma  = (_sync===0.5) ? 2.8  : 4.2 - _sync*2.8;     // 4.2 (subtle, wide) .. 1.4 (dramatic, tight)
   const wFocus = (_sync===0.5) ? 0.55 : 0.40 + _sync*0.30;   // 0.40 .. 0.70
@@ -3177,6 +3259,10 @@ function buildCymCoef(){
     const fc=_dnaMap.gnosis.fingerprint.coef;
     if(fc){ for(let k=0;k<CYM_NMODES;k++) _cymRaw[k] = _cymRaw[k]*(1-_dnaResolve) + (fc[k]||0)*_dnaResolve; }
   }
+  // v81 STABLE: restrict lit modes to the per-song SET (top-8 of the fingerprint / map spectrum). Live music
+  // re-WEIGHTS within the set but can never swap it -> the field F keeps one shape-family per song (the churn
+  // killer #1). Runs before the resting-figure floor so true silence still lights its calm form via Math.max.
+  if(_cymStab && _dnaMap){ const _sd=_cymStabDat(_dnaMap); if(_sd && _sd.set){ for(let k=0;k<CYM_NMODES;k++) if(!_sd.set[k]) _cymRaw[k]=0; } }
   // 1b) resting figure ONLY in TRUE silence (so the live spectrum, not a fixed ring, drives the figure);
   //     v56-9: cfg.cymRest picks the calm-silence shape (0=ring 1=flower 2=concentric rings).
   const _rms = (typeof audioRMS==='number') ? audioRMS : 0;
@@ -3232,6 +3318,7 @@ function buildCymCoef(){
     //      crisp budget). Past 60%, the remaining dynamic range is spent on FINER single modes (focus order + radial-K
     //      + symmetry below) which each stay a crisp eigenfunction — NOT more overlapping fields (the anti-mush rule).
     kDraw = 3 + Math.round(Math.min(_dnaC,0.6)/0.6 * 4);    // 3..7
+    if(_cymStab && _dnaMap){ const _sd=_cymStabDat(_dnaMap); if(_sd) kDraw = _sd.rung[_cymRung].kdraw; }   // v81b: mode COUNT climbs the ladder with the song (3 -> 7), not with instantaneous intensity
     if(_dnaResolve>0) kDraw = Math.round(kDraw*(1-_dnaResolve) + 5*_dnaResolve);   // v74 GNOSIS: settle to a crisp 5-mode mandala
   } else if(en > 0.7) kDraw += 1;
   // v56-3: beat-synced mode bloom — ignite extra modes on a beat boundary with high energy/kick, then
@@ -3251,7 +3338,8 @@ function buildCymCoef(){
   // v60 #10: water-cell mode lights MORE modes (denser CymaScope field) — desktop only; soft-gate still bounds runaway.
   // v71: the effective cell (operator slider OR intensity-driven _dnaCell) adds the dense filled-mandala modes — this
   //      is what lets a DROP explode into a BassForge-grade plate (up to ~15 modes) while the LINE budget stays 7.
-  const _cellEff = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxK?_dnaCell:0);
+  let _cellEff = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxK?_dnaCell:0);
+  if(_cymStab && _dnaMap){ const _sdc=_cymStabDat(_dnaMap); if(_sdc) _cellEff = Math.max(_cellEff, _sdc.rung[_cymRung].cell); }   // v81c: cell fill climbs the ladder -> the top rungs light the full BassForge plate mode count
   if(_cellEff>0.001 && !(typeof LITE!=='undefined'&&LITE)) kDraw = Math.min(CYM_NMODES, kDraw + Math.round(_cellEff*8));
   const idx = Array.from(_cymRaw.keys()).sort((a,b)=>_cymRaw[b]-_cymRaw[a]);   // value-rank (v58 already pays this)
   if(cfg.cymSoftGate){
@@ -3290,7 +3378,8 @@ function buildCymCoef(){
     const dt = (typeof _dtf==='number' && _dtf>0) ? _dtf : 1;
     for(let k=0;k<CYM_NMODES;k++){
       const tgt=_cymRaw[k], cur=_cymCoef[k];
-      const base = (tgt>cur) ? 0.80 : 0.90;   // attack ~0.20/frame, release ~0.10 (~300ms tail)
+      const base = _cymStab ? ((tgt>cur) ? 0.985 : 0.992)      // v81 STABLE: tau ~1.1s attack / ~2.1s release — the field BREATHES instead of re-arranging (seek-snap above unchanged -> deterministic)
+                            : ((tgt>cur) ? 0.80 : 0.90);       // attack ~0.20/frame, release ~0.10 (~300ms tail)
       let nv = cur + (tgt-cur)*(1 - Math.pow(base, dt));
       if(tgt===0 && nv < 0.012) nv = 0;       // snap imperceptible released tails to 0 -> bounds lit-mode count (anti-mush; 0.012->0 is invisible, well above the 0.0005 render gate)
       _cymCoef[k] = nv;
@@ -3313,6 +3402,7 @@ function drawGLCymatic(tt){
   if(cfg.cymSongDNA){ if(playing){ const _dk=_dnaKeyFor(); if(_dk && _dk!==_dnaSrcKey) dnaEnsureScan(); } dnaConduct(songT); }   // v69 DNA decoder: scan once per NEW scannable source (keyless/failed never re-fire) + conduct from the Song Map
   if(cfg.cymMetaDNA && !_dnaKeyFor()){ _mdEnsure(); if(_mdMap){ _dnaMap=_mdMap; dnaConduct(songT); } }   // Phase 2: keyless sources (YouTube/mic) get the synthesized metadata map through the SAME conductor; real PCM always wins via _dnaKeyFor()
   _dnaAct = !!_dnaMap && (cfg.cymSongDNA || cfg.cymMetaDNA);   // Phase 2: gate the DNA drivers for BOTH modes (reduces to `cfg.cymSongDNA && _dnaMap` when cymMetaDNA is off)
+  _cymStab = !!(cfg.cymStable && _dnaAct);                     // v81 STABLE: structure-on-rails engages only with a Song Map (no map -> nothing to derive the rails from)
   // Phase 2 (P4) mic-blend: in metadata mode the STRUCTURE is deterministic (geometry from _dnaFoc), but the room mic
   // lifts the sparkle/glow/crisp LEVELS so the figure comes ALIVE. Additive (never lowers the metadata baseline),
   // metadata-mode only (real-PCM/DNA path untouched), and only when the mic is actually live.
@@ -3332,8 +3422,16 @@ function drawGLCymatic(tt){
   if(_cxD){
     // v71: musical intensity adds symmetry FOLDS (more petals = more mandala complexity into the drop). Deterministic
     //      tier from _dnaC (pure fn of songT -> seek-reproducible); smoothstep flattening near edges damps flicker.
-    const _st = _dnaC<=0.30?0 : _dnaC>=0.92?1 : (()=>{ const t=(_dnaC-0.30)/0.62; return t*t*(3-2*t); })();
-    sym = Math.max(1, Math.min((cfg.cymCell>0.001||_dnaCell>0.001)?16:12, sym + Math.round(_st*6)));   // +0..+6 folds (cap 12 line / 16 cell)
+    const _stLive = _dnaC<=0.30?0 : _dnaC>=0.92?1 : (()=>{ const t=(_dnaC-0.30)/0.62; return t*t*(3-2*t); })();
+    const _sd81 = _cymStab ? _cymStabDat(_dnaMap) : null;
+    if(_sd81){
+      // v81c: the VORTEX POINTS climb the ascension ladder — 6 lobes at the opening (~100Hz feel) up to 16 at the
+      // top (the operator's green-CymaScope count at 900+Hz). Ascending-only re-tiles = the Chladni jump; the old
+      // churn was BIDIRECTIONAL wobble, which the monotonic ladder makes impossible.
+      sym = Math.max(1, Math.min(16, Math.max(sym, _sd81.rung[_cymRung].symT)));
+    } else {
+      sym = Math.max(1, Math.min((cfg.cymCell>0.001||_dnaCell>0.001)?16:12, sym + Math.round(_stLive*6)));   // +0..+6 folds (cap 12 line / 16 cell)
+    }
   }
   if(LITE) sym = Math.min(6, sym);
   // §6 (v59 cymSymBreath): breathing FRACTIONAL symmetry — the kfold mirror axis slowly turns + the petal count
@@ -3511,6 +3609,19 @@ function drawGLCymatic(tt){
     const _gRh = (cfg.cymGnosis ? _dnaResolve : 0);
     const _drift = (cfg.cymPureSpectrum ? 0 : songT*0.6) * (1 - _gRh);
     let hueDeg = (base + (cen-0.5)*40*(1-_gRh) + _drift) % 360;
+    // ===== v81e COLOR ON RAILS (operator: "color cycling way too fast — it should FEEL like the song is forming
+    // the colors"). Stable mode replaces the frame-rate hue drivers (per-frame dominant-pitch jumps up to ±66°,
+    // ±20° centroid jitter) with a SLEWED rail (tau ~3.3s): the song's KEY + the SECTION's dominant pitch (harmony
+    // still paints, at section speed) + a gentle warm climb with the ascension (+30° top — color theory: warmth
+    // rises with intensity). Deterministic: pure fn of map+songT; snaps on seek. =====
+    if(_cymStab){ const _sdh=_cymStabDat(_dnaMap);
+      const _dpH = (_sdh && _sdh.secHue && _cymSecI>=0 && _sdh.secHue[_cymSecI]!==undefined) ? _sdh.secHue[_cymSecI] : 0;
+      const _tgtH = ((((_dnaMap.key ? _dnaMap.key.hue : base) + _dpH + _cymAsc*30) % 360) + 360) % 360;
+      if(_snap0 || _cymHueRail===null) _cymHueRail = _tgtH;
+      else { let _dh = ((_tgtH - _cymHueRail + 540) % 360) - 180;
+             _cymHueRail = (((_cymHueRail + _dh*(1 - Math.pow(0.995, (typeof _dtf==='number'&&_dtf>0)?_dtf:1))) % 360) + 360) % 360; }
+      hueDeg = _cymHueRail + _drift*0.3;   // a whisper of drift stays; the jitter terms are gone
+    }
     if(_dnaOn && _gRh>0 && _dnaMap.gnosis && _dnaMap.gnosis.fingerprint){
       const held=((_dnaMap.gnosis.fingerprint.hue%360)+360)%360, live=((hueDeg%360)+360)%360;
       let d=held-live; if(d>180)d-=360; if(d<-180)d+=360;   // shortest-arc (no hue wraparound spin)
@@ -3544,10 +3655,22 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uTiltY'), _tiltY);
     g.uniform1f(glU(P,'uSymBreath'), _uSymBreath);   // §6: 0 when cymSymBreath=0 -> shader selects v58 kfold (bit-identical)
     g.uniform1f(glU(P,'uSymWobble'), _uSymWobble);
-    const _cellEffU = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0);   // v71 line->filled-cell crossfade
+    let _cellEffU = Math.max((typeof cfg.cymCell==='number'?cfg.cymCell:0)/100, _cxD?_dnaCell:0);   // v71 line->filled-cell crossfade
+    if(_cymStab && _dnaMap){ const _sdc=_cymStabDat(_dnaMap); if(_sdc) _cellEffU = Math.max(_cellEffU, _sdc.rung[_cymRung].cell); }   // v81c: water-cell fill climbs to FULL CymaScope at the top rung (sparse line-figure at the bottom); _lzCellEff stash below inherits automatically
     const _ukMulU = (_dnaAct) ? (1 + (_cxD?0.6*_dnaC:0) + _dnaSpread*0.30) : 1.0;   // v71 intensity + v72 spread ring-fineness (FULL density = complexity); crispness handled by the v72.2 contour overlay, not by capping. Computed ONCE so shader+laser-SIM can't diverge.
     g.uniform1f(glU(P,'uCell'), _cellEffU);   // v60 🌊 water-cell fill mix
     g.uniform1f(glU(P,'uKMul'), _ukMulU);
+    // v81 STABLE: the STRUCTURAL multiplier — a per-song constant (KMULBASE from whole-song intensity p75) when
+    // stable, the live intensity value otherwise (byte-identical off). Punch decoupled from cell size when stable.
+    const _sd81u = _cymStab ? _cymStabDat(_dnaMap) : null;
+    const _ukMulS = _sd81u ? _sd81u.rung[_cymRung].kmul : _ukMulU;   // v81b: ring + honeycomb density climbs the ladder (per-song kb keeps the fingerprint; monotonic -> the rare Mang re-tile IS the Chladni jump, ascending only)
+    g.uniform1f(glU(P,'uKMulS'),  _ukMulS);
+    g.uniform1f(glU(P,'uKPunch'), _cymStab ? 0 : _uPunch);
+    g.uniform1f(glU(P,'uInkFloor'), _cymStab ? 0.85 : 0.0);   // v81d: fine-line ink floor — saturated lattice through the intense rungs (0 = original fades, byte-identical)
+    const _uFlowB = _cymStab ? _uFlow*0.25 : _uFlow;          // v81e: band-scroll damped 4x in stable mode (the kfold rotation keeps full _uFlow — the figure still turns fluidly)
+    g.uniform1f(glU(P,'uFlowB'), _uFlowB);
+    const _uPlate = _cymStab ? songT*(0.055 + 0.095*_cymAsc) : 0.0;   // v81f: gear-plate mesh rate — slow mechanical churn that quickens gently up the ladder; pure fn of songT (seek-safe, laser-safe)
+    g.uniform1f(glU(P,'uPlate'), _uPlate);
     g.uniform1f(glU(P,'uCellGap'), 0.40 - (typeof cfg.cymCellGap==='number'?cfg.cymCellGap:0)/100*0.18);   // v72: cell TRANSPARENCY — 0->0.40 (current, thin gaps) .. 100->0.22 (wide dark gaps = clear complex structure)
     g.uniform1f(glU(P,'uFuse'),  fused ? 1.0 : 0.0);
     g.uniform1f(glU(P,'uPunch'), _uPunch);
@@ -3565,8 +3688,8 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uKeyBase'), _uKeyBase);
     g.uniform1f(glU(P,'uKeyWarm'), _uKeyWarm);
     // v67: stash the EXACT cellHue inputs so the laser mandala colors identically (deterministic; no re-derivation drift; zero shader effect)
-    _lzUHarm=_uHarm; _lzChPhase=_chPhase; _lzKeyBase=_uKeyBase; _lzKeyWarm=_uKeyWarm; _lzUFlow=_uFlow;
-    _lzSym=sym; _lzCellEff=_cellEffU; _lzKMul=_ukMulU;   // v71/v72: stash the EXACT geometry the shader used (same locals as the uniforms) so the laser SIM can never diverge
+    _lzUHarm=_uHarm; _lzChPhase=_chPhase; _lzKeyBase=_uKeyBase; _lzKeyWarm=_uKeyWarm; _lzUFlow=_uFlow; _lzUFlowB=_uFlowB; _lzPlate=_uPlate;   // v81e/f: SIM mirrors the damped scroll + the gear-plate angle exactly
+    _lzSym=sym; _lzCellEff=_cellEffU; _lzKMul=_ukMulS;   // v71/v72 + v81: stash the STRUCTURAL multiplier the shader's radK/Mang actually used (uKMulS; ==_ukMulU when stable off) so the laser SIM can never diverge — and in stable mode the SIM's punch-free K now matches the shader's K exactly
     _lzUCell=(typeof cfg.cymCell==='number'?cfg.cymCell:0)/100;
     g.uniform1f(glU(P,'uCellPal'), cfg.cymCellPalette?1.0:0.0);
     g.uniform1f(glU(P,'uBgTint'),  cfg.cymBgTint?1.0:0.0);
@@ -3577,7 +3700,7 @@ function drawGLCymatic(tt){
     g.uniform1f(glU(P,'uFOL'),     (typeof cfg.cymFOL==='number'?cfg.cymFOL:0)/100);
     g.uniform1f(glU(P,'uCellBloom'),(typeof cfg.cymCellBloom==='number'?cfg.cymCellBloom:0)/100 * _refAtt);
     g.uniform1f(glU(P,'uIrid'),    (typeof cfg.cymIrid==='number'?cfg.cymIrid:0)/100);
-    g.uniform1f(glU(P,'uEngrave'), (typeof cfg.cymEngrave==='number'?cfg.cymEngrave:0)/100);   // v79 ENGRAVED (0 = byte-identical; SIM does not read it)
+    g.uniform1f(glU(P,'uEngrave'), Math.min(1, (typeof cfg.cymEngrave==='number'?cfg.cymEngrave:0)/100 + (_cymStab ? _cymAsc*0.35 : 0)));   // v79 ENGRAVED; v81f: the etch DEEPENS as the song climbs the ladder (green-image hardening; 0 + non-stable = byte-identical)
   });
   // Phase C: draw the connectogram on the SAME module-level 2D ctx glDrawSingle composited into.
   // When cfg.refract, ctx === _srcc (refraction offscreen) -> the brain refracts THROUGH the cube.
@@ -3864,9 +3987,11 @@ function _cymPhase(x,y,sym){
   const radK = (12.0 + uCell*8.0) * kmul;                 // == shader radial floor
   const Mang = Math.floor((10.0 + uCell*10.0) * kmul + 0.5);   // == shader angular cells, INTEGER
   const ringId = Math.floor(aFr*K + r*radK);
-  const aphase = Mang*ang*0.15915494 + 0.5*(ringId % 2);  // M cells/rev + brick offset (mod 2)
+  const plate=(typeof _lzPlate==='number')?_lzPlate:0;    // v81f: mirror the gear-plate counter-rotation EXACTLY (parity hard-gate)
+  const aphase = Mang*ang*0.15915494 + 0.5*(ringId % 2) + ((ringId % 2)*2-1)*plate;  // M cells/rev + brick offset + gear mesh
   const _t = Math.max(0, Math.min(1, (r - 0.06)/(0.20 - 0.06))); const angMix = _t*_t*(3 - 2*_t);   // == shader smoothstep(0.06,0.20,r)
-  return aFr*K + r*radK - flow*1.6 + aphase*angMix;       // == FRAG_CYMATIC phase (flow hoisted to top for the line-2079 pre-rotation)
+  const flowB=(typeof _lzUFlowB==='number')?_lzUFlowB:flow;   // v81e: the shader's band-scroll uses uFlowB (damped in stable mode) — mirror EXACTLY or the traced rings drift off the rendered ones
+  return aFr*K + r*radK - flowB*1.6 + aphase*angMix;      // == FRAG_CYMATIC phase (rotation above keeps full flow, matching the shader's kfold pre-rotation)
 }
 // Fill an N×N grid in [-1,1] from a sampler; also return min/max (for ring level range).
 function _cymFillGrid(sample,N,sym){
@@ -4627,6 +4752,177 @@ const GLF = {
 };
 /*GLF-END*/
 
+/* ==================== EXODUS - Song equation: the CYMLAB recipe as a first-class GPU pattern ====================
+   ADDITIVE ONLY (operator: build it in as Exodus so we do not mess with anything). Genesis/cymatic untouched.
+   The full lab stack, born 2026-07-01: the real 16-mode Bessel song-equation field on counter-rotating ring PLATES
+   (transmission gears; each ring ASSIGNED a part of the song, speed = that part's HIT RATE, flywheel inertia, motion
+   blur, metal glints), the FORM ENGINE (song hits snap a form -> fast morph -> HOLD so the cell lattice fully CLOSES
+   in EVERY plate), the DNA-mode allocator (SYMPHONY/BUILD/STROBE placed by the song's own dynamics), and the FX layer
+   (onset sparks at the hit part's ring / kick shockwave rings / beam-bursts on snaps / tempo LFO). Constants = the
+   operator SAVE-POINT v2. Screen pattern only (no laser-SIM path); FX seeds are Math.random (amplitude-class). */
+const FRAG_EXODUS = `
+uniform float uRings,uCells,uSwirl2,uEngr2,uInk2,uPulse2,uCoreAng,uCoreEn,uForm,uBlur2,uGlint2,uLfo,uBeamT,uBeamS;
+uniform float uPlateAng[14]; uniform float uPlateEn[14]; uniform float uPlateVel[14];
+uniform float uCoefX[16];
+uniform vec4 uSpkT,uSpkR,uSpkS; uniform vec2 uShkT;
+const float ZkX[16]=float[16](2.4048,3.8317,5.1356,5.5201,6.3802,7.0156,7.5883,8.4172,8.6537,8.7715,9.7610,10.1735,11.0647,11.6198,11.7915,12.3386);
+const float NkX[16]=float[16](0.,1.,2.,0.,3.,1.,4.,2.,0.,5.,3.,1.,4.,2.,0.,5.);
+const float PkX[16]=float[16](0.,1.5707963,3.1415927,0.,4.7123890,1.5707963,0.,3.1415927,0.,1.5707963,4.7123890,1.5707963,0.,3.1415927,0.,1.5707963);
+float JnX(float n,float x){ float ax=abs(x)+1e-4;
+  float asym=sqrt(0.6366198/ax)*cos(ax-n*1.5707963-0.7853982);
+  float nr=pow(min(1.0,ax/(2.4+n)),n)*(1.0-ax*ax/(4.0*(n+1.0))*0.5);
+  return mix(nr, asym, smoothstep(0.6+n*0.8, 2.6+n, ax)); }
+void main(){
+  vec2 uv=(gl_FragCoord.xy*2.0-iResolution)/min(iResolution.x,iResolution.y);
+  float r=length(uv); float ang=atan(uv.y,uv.x);
+  float breathe=1.0+0.0075*(0.5+0.9*uCoreEn)*sin(iTime*0.45); r/=breathe;
+  float discR=0.94, coreR=0.16;
+  float band=(r-coreR)/max(1e-4,(discR-coreR));
+  float ringF=band*uRings; float ringId=floor(ringF); float rIn=fract(ringF);
+  int idx=int(clamp(ringId,0.0,13.0));
+  float velA=uPlateVel[idx];
+  float smear=uBlur2*clamp(abs(velA)*0.55,0.0,1.0)*0.10;
+  float segN=max(3.0, floor(uCells*0.5));
+  float v=0.0, wallAcc=0.0, Facc=0.0;
+  for(int s=0;s<4;s++){
+    float off=(float(s)/3.0-0.5)*smear;
+    float a2=ang+uPlateAng[idx]+off;
+    float seg=6.2831853/segN; float aa=mod(a2,seg); aa=abs(aa-0.5*seg);
+    float F=0.0;
+    for(int k=0;k<16;k++){ F += uCoefX[k]*JnX(NkX[k],ZkX[k]*r)*cos(NkX[k]*aa+PkX[k]); }
+    float aFr=abs(F)*(1.0+r*2.4);
+    float phase=aFr*(8.0+uEngr2*1.6)+r*(11.0+uEngr2);
+    float fb=fract(phase); float fw=fwidth(phase)+1e-4;
+    float line=1.0-smoothstep(0.0,1.4*fw,abs(fb-0.5));
+    float cellv=max(smoothstep(0.020,0.095,aFr), uForm*0.40);
+    float bandI = floor(phase);
+    float cw    = (a2*0.15915494)*uCells + 0.5*mod(bandI,2.0) + F*0.55;
+    float fwc   = fwidth(cw)+1e-4;
+    float cellL = 1.0-smoothstep(0.0,(1.1+1.3*uForm)*fwc,abs(fract(cw)-0.5));
+    float lat   = max(line, cellL*max(smoothstep(0.03,0.09,aFr), uForm*0.90));
+    float wallR = smoothstep(0.40,0.492,abs(rIn-0.5+F*0.16));
+    float vs=(0.10+0.95*cellv)*(1.0+uPlateEn[idx]*uPulse2*0.8);
+    vs*=1.0-lat*uInk2*(0.35+0.65*uForm);
+    vs*=1.0-wallR*uInk2*(0.25+0.55*uForm)*max(smoothstep(0.02,0.08,aFr), uForm*0.85);
+    v+=vs*0.25; wallAcc+=wallR*0.25; Facc+=F*0.25;
+  }
+  float glint=pow(max(0.0,cos(ang-2.2)),24.0)*(1.0-wallAcc)*uGlint2*clamp(0.25+abs(velA)*0.9,0.0,1.4);
+  v+=glint*0.55;
+  if(r<coreR){ float cr=r/coreR;
+    float rings=fract(cr*7.0-uCoreAng*0.5); float fwR=fwidth(cr*7.0)+1e-4;
+    float rl=1.0-smoothstep(0.0,1.5*fwR,abs(rings-0.5));
+    v=(0.22+0.7*(1.0-cr)*(0.6+0.4*(0.5+0.5*cos(ang*8.0+uCoreAng))))*(0.8+0.5*uCoreEn);
+    v*=1.0-rl*uInk2*0.8; }
+  float rimGlow=smoothstep(0.10,0.0,abs(r-discR))*(0.75+0.5*uCoreEn);
+  float inside=1.0-smoothstep(discR,discR+0.015,r);
+  v=v*inside+rimGlow*0.5;
+  float fx=0.0;
+  for(int q=0;q<4;q++){ float ag=uSpkT[q]; if(ag<0.7){ float rr=uSpkR[q]+ag*0.35;
+    float dotn=step(0.78,fract(sin((floor(ang*28.0)+uSpkS[q])*12.9898)*43758.55));
+    fx += dotn*(1.0-smoothstep(0.0,0.10,abs(r-rr)))*exp(-ag*4.5)*0.9; } }
+  for(int q=0;q<2;q++){ float ag=uShkT[q]; if(ag<1.0){
+    fx += (1.0-smoothstep(0.0,0.05,abs(r-(0.18+ag*0.85))))*exp(-ag*3.2)*0.8; } }
+  if(uBeamT<0.5){ for(int q=0;q<8;q++){ float th=6.2831853*fract(sin((float(q)+uBeamS)*7.1313)*43758.55);
+    float dd=abs(mod(ang-th+3.1415927,6.2831853)-3.1415927);
+    fx += (1.0-smoothstep(0.0,0.02+0.02*r,dd))*exp(-uBeamT*7.0)*smoothstep(1.0,0.15,r)*0.7; } }
+  v = v*(1.0+uLfo*0.06) + fx*inside;
+  float hue=fract(r*0.9 + Facc*0.16 + ringId*0.055 + uPlateAng[idx]*0.03 + iTime*0.004 + uLfo*0.012);
+  vec3 col = hsl2rgb(vec3(hue, 1.0, clamp(smoothstep(0.04,0.78,v)*0.5, 0.0, 0.5)));
+  col += vec3(1.0,0.95,0.8)*pow(max(v-0.8,0.0),2.0)*1.4;
+  col *= 1.0-0.30*smoothstep(0.60,1.0,r/discR);
+  fragColor=vec4(col,1.0);
+}`;
+
+const EXO = { RINGS:14, CELLS:28, MESH:0.40, REACT:1.00, PULSE:0.60, BLUR:0.60, INERT:0.60, GLINT:0.50, SWIRL:2.9, ENGR:2.0, INK:0.90 };   // the operator SAVE-POINT v2 numbers, baked (no settings rows - house doctrine)
+const _EXO_P = [[25,60],[60,150],[150,400],[400,1000],[1000,3000],[3000,6000],[6000,12000],[12000,16000]];   // SUB..AIR parts; inner rings = the engine room
+const _exoF = n => new Float32Array(n);
+const _exo = { ePrev:_exoF(8), fluxE:_exoF(8), lastHit:new Float32Array(8).fill(-9), rate:_exoF(8), kick:_exoF(8), en:_exoF(8), pk:new Float32Array(8).fill(0.05), pKick:_exoF(8),
+  ang:_exoF(14), vel:_exoF(14), enR:_exoF(14), pvel:_exoF(14), coef:_exoF(16), hA:_exoF(16), hB:_exoF(16), morphT:1, form:1, lastSnap:-9, snapIv:0.5, pend:false, gFluxE:0,
+  rawEn:0, intF:0, intS:0, intLo:0.3, intHi:0.7, snapK:3.4, mDur:0.30, refrac:0.34,
+  spkT:new Float32Array(4).fill(9), spkR:_exoF(4), spkS:_exoF(4), shkT:new Float32Array(2).fill(9), spkN:0, shkN:0, beamT:9, beamS:0, coreAng:0, coreEn:0, lfo:0 };
+function exoTick(dt){
+  const X=_exo, now=(typeof actx!=='undefined'&&actx)?actx.currentTime:performance.now()/1000;
+  let overall=0, gf=0, raw=0;
+  const fd=(typeof freqData!=='undefined')?freqData:null;
+  const sr=(typeof actx!=='undefined'&&actx)?actx.sampleRate:44100;
+  if(fd&&fd.length){ const hz=(sr/2)/fd.length;
+    for(let p=0;p<8;p++){
+      const b0=Math.max(0,Math.floor(_EXO_P[p][0]/hz)), b1=Math.min(fd.length-1,Math.ceil(_EXO_P[p][1]/hz));
+      let s=0,n=0; for(let b=b0;b<=b1;b++){ s+=fd[b]; n++; }
+      const e=n?(s/n)/255:0; raw+=e;
+      X.pk[p]=Math.max(X.pk[p]*0.9995,e,0.05);
+      const en=Math.min(1,e/X.pk[p]);
+      X.en[p]+=(en-X.en[p])*(en>X.en[p]?0.5:0.10);
+      const flux=Math.max(0,e-X.ePrev[p]); X.ePrev[p]=e;
+      X.fluxE[p]+=(flux-X.fluxE[p])*0.04; gf+=flux;
+      if(flux>X.fluxE[p]*2.3+0.012 && (now-X.lastHit[p])>0.09){
+        const iv=now-X.lastHit[p]; if(iv>0&&iv<3) X.rate[p]+=(1/iv-X.rate[p])*0.35;
+        X.lastHit[p]=now; X.kick[p]=1; }
+      if(now-X.lastHit[p]>Math.max(0.6,2.2/Math.max(X.rate[p],0.5))) X.rate[p]*=Math.pow(0.25,dt);
+      X.kick[p]*=Math.pow(0.02,dt); overall+=X.en[p];
+    } }
+  X.rawEn=raw/8; X.coreEn=Math.min(1,overall/8*1.6);
+  X.gFluxE+=(gf-X.gFluxE)*0.06;
+  if(gf>X.gFluxE*X.snapK+0.02 && (now-X.lastSnap)>X.refrac) X.pend=true;
+  X.intF+=(X.rawEn-X.intF)*Math.min(1,dt/0.35); X.intS+=(X.rawEn-X.intS)*Math.min(1,dt/2.8);
+  const bu=Math.max(0,Math.min(1,(X.intF-X.intS)*5));
+  X.intLo+=(X.intF-X.intLo)*Math.min(1,dt/8); if(X.intF<X.intLo)X.intLo=X.intF;
+  X.intHi+=(X.intF-X.intHi)*Math.min(1,dt/8); if(X.intF>X.intHi)X.intHi=X.intF;
+  const rel=(X.intF-X.intLo)/Math.max(0.05,X.intHi-X.intLo);
+  if(rel>0.72||(bu>0.55&&rel>0.50)){ X.snapK=1.7; X.mDur=0.085; X.refrac=0.13; }
+  else if(bu>0.22||rel>0.45){ X.snapK=2.8-1.0*bu; X.mDur=0.18-0.07*bu; X.refrac=0.22; }
+  else { X.snapK=3.4; X.mDur=0.30; X.refrac=0.34; }
+  if(X.pend && X.morphT>=0.45){
+    if(X.lastSnap>0){ const iv=now-X.lastSnap; if(iv>0.15&&iv<2.5) X.snapIv+=(iv-X.snapIv)*0.3; }
+    X.beamT=0; X.beamS=Math.random()*10;
+    for(let k=0;k<16;k++){ X.hA[k]=X.coef[k]; const p=Math.min(7,k>>1); X.hB[k]=0.09+X.en[p]*0.62; }
+    X.morphT=0; X.pend=false; X.lastSnap=now;
+  }
+  X.morphT=Math.min(1,X.morphT+dt/X.mDur);
+  const f=X.morphT*X.morphT*(3-2*X.morphT); X.form=f;
+  for(let k=0;k<16;k++) X.coef[k]=X.hA[k]+(X.hB[k]-X.hA[k])*f;
+  if(now-X.lastSnap>1.2){ for(let k=0;k<16;k++){ const p=Math.min(7,k>>1); X.hB[k]+=((0.09+X.en[p]*0.62)-X.hB[k])*dt*0.8; } }
+  for(let i=0;i<14;i++){
+    const p=Math.min(7,Math.floor(i*8/14));
+    const dir=(i%2?-1:1), gr=1/(0.35+0.65*(i+1)/14);
+    const target=(0.05+(X.rate[p]*0.10+X.en[p]*0.04)*EXO.REACT)*EXO.MESH*1.5*gr;
+    const tau=0.06+EXO.INERT*(0.22+0.85*(1-i/13));
+    X.vel[i]+=(target-X.vel[i])*(1-Math.exp(-dt/tau));
+    X.ang[i]+=dir*X.vel[i]*dt;
+    X.pvel[i]=dir*X.vel[i];
+    X.enR[i]=Math.min(1,X.en[p]*0.65+X.kick[p]*0.55);
+  }
+  X.coreAng+=(0.05+X.coreEn*EXO.REACT*0.4)*EXO.MESH*dt*3;
+  for(let p=0;p<8;p++){
+    if(X.kick[p]>0.9 && X.pKick[p]<=0.9){
+      if(p<=1){ X.shkT[X.shkN&1]=0; X.shkN++; }
+      else { const q=X.spkN&3; X.spkT[q]=0; X.spkR[q]=0.16+((p+0.5)/8)*0.78; X.spkS[q]=Math.random()*10; X.spkN++; }
+    } X.pKick[p]=X.kick[p];
+  }
+  for(let q=0;q<4;q++) X.spkT[q]+=dt; for(let q=0;q<2;q++) X.shkT[q]+=dt; X.beamT+=dt;
+  X.lfo=Math.sin(6.2831853*((now-X.lastSnap)/Math.max(0.25,X.snapIv)));
+}
+function drawGLExodus(tt){
+  if(!glInit()){ glNotice(_glLost ? 'recovering GPU...' : 'EXODUS needs WebGL2 - try another pattern'); return; }
+  exoTick((typeof _dt==='number'&&_dt>0)?_dt:1/60);
+  const X=_exo;
+  glDrawSingle(FRAG_EXODUS, 'exodus', tt, (P)=>{
+    const g=GL;
+    g.uniform1f(glU(P,'uRings'),EXO.RINGS);   g.uniform1f(glU(P,'uCells'),EXO.CELLS);
+    g.uniform1f(glU(P,'uSwirl2'),EXO.SWIRL);  g.uniform1f(glU(P,'uEngr2'),EXO.ENGR);
+    g.uniform1f(glU(P,'uInk2'),EXO.INK);      g.uniform1f(glU(P,'uPulse2'),EXO.PULSE);
+    g.uniform1f(glU(P,'uBlur2'),EXO.BLUR);    g.uniform1f(glU(P,'uGlint2'),EXO.GLINT);
+    g.uniform1f(glU(P,'uCoreAng'),X.coreAng); g.uniform1f(glU(P,'uCoreEn'),X.coreEn);
+    g.uniform1f(glU(P,'uForm'),X.form);       g.uniform1f(glU(P,'uLfo'),X.lfo);
+    g.uniform1f(glU(P,'uBeamT'),X.beamT);     g.uniform1f(glU(P,'uBeamS'),X.beamS);
+    g.uniform1fv(glU(P,'uPlateAng'),X.ang);   g.uniform1fv(glU(P,'uPlateEn'),X.enR);
+    g.uniform1fv(glU(P,'uPlateVel'),X.pvel);  g.uniform1fv(glU(P,'uCoefX'),X.coef);
+    g.uniform4fv(glU(P,'uSpkT'),X.spkT);      g.uniform4fv(glU(P,'uSpkR'),X.spkR);
+    g.uniform4fv(glU(P,'uSpkS'),X.spkS);      g.uniform2fv(glU(P,'uShkT'),X.shkT);
+  });
+}
+/* ==================== end EXODUS ==================== */
+
 const draws = {
   prism:drawPrism, tesseract:drawTesseract, kaleid:drawKaleidoscope, matrix:drawMatrix,
   tunnel:drawTunnel, fractal:drawFractal, flower:drawFlower, metatron:drawMetatron,
@@ -4638,7 +4934,7 @@ const draws = {
   scope:drawScope,
   glbloom:drawGLBloom, julia:drawGLJulia, mandelbox:drawGLMandelbox, cubetunnel:drawGLTunnel,
   voronoi:drawGLVoronoi, truchet:drawGLTruchet, marble:drawGLMarble, flame:drawGLFlame,
-  grayscott:drawRD, fluid:drawFluid, curlflow:drawCurl, genesis:drawGLGenesis,
+  grayscott:drawRD, fluid:drawFluid, curlflow:drawCurl, genesis:drawGLGenesis, exodus:drawGLExodus,
   liquidsky:drawLiquidSky,
 };
 
@@ -5767,7 +6063,19 @@ function refract(){
     return;
   }
   mainCtx.globalCompositeOperation = 'source-over'; mainCtx.fillStyle = '#000'; mainCtx.fillRect(0, 0, W, H);
-  const sh = 4 + audioBass * 16 + onsetEnv * 24 + stereoWidth * 12;                              // split widens with bass + chromatic POP on transients (#11/#29) + stereo width (#41)
+  // v81f SEIZURE-SAFE SPLIT (operator: the every-kick R/G/B slam "would throw someone into an epileptic seizure").
+  // In the stable flagship the chromatic split becomes a TEMPO pulse (locked to the beat grid) whose intensity RAMPS
+  // with the build into the drop (map anticipation/punch — deterministic): gentle floor early, full splits earned only
+  // at the climax. Smooth bounded pulses, never a raw per-transient strobe. Other patterns keep the original response.
+  let sh;
+  if(typeof _cymStab!=='undefined' && _cymStab){
+    const _bp = (typeof _beatPh==='number') ? Math.max(0, Math.min(1, _beatPh)) : 0;
+    const _pulse = Math.pow(1 - _bp, 2.0);                                                       // sharp ON the beat, decaying through it — in TIME
+    const _ramp  = 0.15 + 0.85*Math.max((typeof _dnaAnticip==='number'?_dnaAnticip:0), (typeof _dnaPunch==='number'?_dnaPunch:0));
+    sh = 4 + audioBass*6 + _pulse*_ramp*22;
+  } else {
+    sh = 4 + audioBass * 16 + onsetEnv * 24 + stereoWidth * 12;                                  // split widens with bass + chromatic POP on transients (#11/#29) + stereo width (#41)
+  }
   const chans = [['#ff0000', sh, 0], ['#00ff00', -sh*0.5, sh*0.87], ['#0000ff', -sh*0.5, -sh*0.87]];
   for(let i = 0; i < 3; i++){
     const c = chans[i];
@@ -5919,7 +6227,7 @@ function loop(){
     let _rt = t;                                                // render time fed to each pattern — channel B can run it in REVERSE so the overlay counter-spins
     const safe = (fn) => { try{ fn(_rt); }catch(_){} };   // one bad pattern frame never kills the loop
     const drawOne = (fn) => {
-      if(mode === 'genesis'){ safe(fn); return; }            // GENESIS self-folds from cfg.symmetry; never outer-kaleidoscope it
+      if(mode === 'genesis' || mode === 'exodus'){ safe(fn); return; }            // GENESIS self-folds from cfg.symmetry; never outer-kaleidoscope it
       const N = Math.max(1, _symEff | 0);                     // SOTA #12: audio-driven symmetry count
       if(N <= 1) safe(fn);
       else for(let k = 0; k < N; k++){   // kaleidoscopic mirror symmetry
@@ -6181,7 +6489,7 @@ const MODE_CLASSES = [
   { name:'Grid & Field',     modes:[['matrix','⊞','Matrix'],['hexgrid','⬢','Hex Grid'],['starfield','✶','Starfield']] },
   { name:'Waves & Fluid',    modes:[['metaballs','⬭','Metaballs'],['waveform','〜','Waveform'],['scope','⊙','Scope'],['liquidsky','☵','Liquid Sky'],['lissajous','∞','Lissajous'],['plasma','▒','Plasma'],['ripples','◌','Ripples']] },
   { name:'Audio Bars',       modes:[['spectrumfan','✺','Spectrum Fan'],['spectrogram','◉','Polar Spectrogram'],['bars','▮','Spectrum Bars'],['radial','☀','Radial Bars']] },
-  { name:'GPU · WebGL',      modes:[['glbloom','✸','Spectral Bloom'],['julia','❉','Julia Set'],['mandelbox','◰','Mandelbox IFS'],['cubetunnel','◉','Volumetric Tunnel'],['voronoi','⬡','Voronoi Spectro'],['truchet','╳','Truchet Maze'],['marble','〰','Domain Marble'],['flame','🜂','Fractal Flame'],['grayscott','🦠','Reaction-Diffusion'],['fluid','🌊','Fluid Smoke'],['curlflow','✦','Curl Particles'],['genesis','✴','Genesis · song equation']] },
+  { name:'GPU · WebGL',      modes:[['glbloom','✸','Spectral Bloom'],['julia','❉','Julia Set'],['mandelbox','◰','Mandelbox IFS'],['cubetunnel','◉','Volumetric Tunnel'],['voronoi','⬡','Voronoi Spectro'],['truchet','╳','Truchet Maze'],['marble','〰','Domain Marble'],['flame','🜂','Fractal Flame'],['grayscott','🦠','Reaction-Diffusion'],['fluid','🌊','Fluid Smoke'],['curlflow','✦','Curl Particles'],['genesis','✴','Genesis · song equation'],['exodus','⚙','Exodus · song equation']] },
 ];
 const MODE_INFO = {}; MODE_CLASSES.forEach(c => c.modes.forEach(m => { MODE_INFO[m[0]] = { glyph:m[1], label:m[2] }; }));
 function saveModeSettings(m){ modeSettings[m] = { b:manualBrightness, s:manualSpeed, i:manualIntensity, h:manualHue, gl:manualGlow, th:manualThick, de:manualDensity }; LS.set('modeSettings', modeSettings); }
@@ -6260,7 +6568,7 @@ const _GENESIS_BAKE = {
   cymPalette:false, cymPureSpectrum:false, cymDepth:0, cymDepthDyn:false, cymFuse:false, cymPunch:0, cymLead:0,
   cymDecomp:0, cymBass:0, cymSymBreath:0, cymPing:false, cymSyncAll:false, cymHarmonyGain:0, cymFlow:0,
   cymCrisp:0, cymGlow:0, cymHat:0, cymStereo:0, cymBright:0, cymBgTint:false, cymMicro:0, cymMeniscus:0,
-  cymFlat:0, cymSeamAA:0, cymFOL:0, cymCellBloom:0, cymIrid:0, cymEngrave:45, cymLaser:false, cymLaserGalvo:false,
+  cymFlat:0, cymSeamAA:0, cymFOL:0, cymCellBloom:0, cymIrid:0, cymEngrave:45, cymStable:true, cymLaser:false, cymLaserGalvo:false,
 };
 let _genesisBakedOnce = false;
 function applyGenesisBake(){
@@ -6826,7 +7134,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v80';
+const APP_VERSION = 'v81';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
