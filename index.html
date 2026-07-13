@@ -321,7 +321,13 @@ body.yt-live #ui{width:58vw;}                                        /* keep the
   font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--mu);
   background:rgba(255,255,255,.04);border:1px solid var(--bo);border-radius:10px;}
 .tool:active{color:var(--c);border-color:rgba(0,245,212,.4);background:rgba(0,245,212,.08);}
+.tool.on{color:var(--c);border-color:rgba(0,245,212,.55);background:rgba(0,245,212,.12);}
 .tool .ti{font-size:14px;}
+/* 🧊 CUBE MODE — floating size buttons (live OUTSIDE #ui so hud-hidden never touches them) */
+#cubeCtl{display:none;position:fixed;z-index:60;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);left:50%;transform:translateX(-50%);gap:16px;}
+body.cube-mode #cubeCtl{display:flex;}
+#cubeCtl button{width:54px;height:54px;border-radius:50%;font-size:26px;line-height:1;font-weight:700;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.28);}
+#cubeCtl button:active{background:rgba(0,245,212,.18);border-color:rgba(0,245,212,.5);}
 
 /* ---------- generic slide-in panel (settings / playlist) ---------- */
 .panel{position:fixed;inset:0;z-index:6;background:rgba(10,10,12,.96);
@@ -528,6 +534,7 @@ body.reduce .livedot{animation:none;}
       <button class="tool" id="plBtn"><span class="ti">≡</span><span data-i18n="PLAYLIST">PLAYLIST</span></button>
       <button class="tool" id="setBtn"><span class="ti">⚙</span><span data-i18n="SETTINGS">SETTINGS</span></button>
       <button class="tool" id="fsBtn"><span class="ti">⛶</span><span data-i18n="FULL">FULL</span></button>
+      <button class="tool" id="cubeBtn"><span class="ti">🧊</span><span>CUBE</span></button>
       <button class="tool" id="helpBtn"><span class="ti">?</span><span data-i18n="HELP">HELP</span></button>
     </div>
 
@@ -692,6 +699,7 @@ body.reduce .livedot{animation:none;}
       <div class="row"><label>Pyramid spin</label><div class="sw" id="swPyrSpin"></div></div>
       <div class="row"><label>Pyramid spin speed</label><input type="range" class="prng" id="setSpinSpeed" min="5" max="100" value="25"></div>
       <div class="btnrow"><button class="pbtn" id="cubePreset">🔮 Cube projection preset</button></div>
+      <div class="row"><label>🧊 Cube mode <span class="sub">(place a glass cube on the screen — pre-mirrored footprint so the cube's internal reflections compose a hologram; drag to move, pinch to size, double-tap to exit)</span></label><div class="sw" id="swCubeMode"></div></div>
       <div class="row"><label>Mono-hue lock</label><div class="sw" id="swMono"></div></div>
       <div class="row"><label>Symmetry (mirror)</label><input type="range" class="prng" id="setSym" min="1" max="8" value="1"></div>
       <div class="row"><label>Pattern transitions <span class="sub">(crossfade when switching patterns)</span></label><div class="sw" id="swTrans"></div></div>
@@ -874,6 +882,7 @@ body.reduce .livedot{animation:none;}
   </div>
 </div>
 <div class="offline" id="offlinePill">⚠ Offline — search needs a connection</div>
+<div id="cubeCtl"><button id="cubeMinus" aria-label="Smaller cube square">−</button><button id="cubePlus" aria-label="Larger cube square">＋</button></div>
 <div id="toasts"></div>
 <div id="strobe"></div>
 
@@ -1047,10 +1056,13 @@ const cfg = Object.assign({
   cymEngrave:0,        // v79 ENGRAVED look — harmonic sub-contours + angular striations + organic petals (0 = off, byte-identical v75 outside the Genesis flagship; baked to 45 in _GENESIS_BAKE)
   cymStable:false,     // v81 CELL STABILITY "structure on rails" — freeze the cell tessellation per SONG (Mang/radK from a per-song intensity base, K punch-decoupled, sym folds fixed, mode SET from the fingerprint, foc section-railed, slow coef EMA); live energy (brightness/crisp/glow/punch/blooms/rotation) untouched. OFF = byte-identical v80. Baked ON in _GENESIS_BAKE.
   cymSyncAll:false,    // v60 MASTER 'Full sync' macro — writes the whole orchestra at balanced gains
+  // 🧊 v82 CUBE MODE — physical glass cube on the screen (footprint square + pre-mirrored TIR bands). cubePx = square size in CSS px (source of truth); cubeMM = human label; cubeXf/cubeYf = square center as screen fractions. Default OFF -> byte-identical.
+  cubeMode:false, cubeXf:0.5, cubeYf:0.5, cubeMM:20, cubePx:0, cubePxPerMM:(96/25.4*((typeof devicePixelRatio!=='undefined'&&devicePixelRatio)?devicePixelRatio:1)),
   fullGlow:false   // mobile escape hatch: force the full desktop render path (per-element shadowBlur + cube refraction) on a phone
 }, LS.get('cfg', {}));
 // migrate the old standalone-bridge URL to same-origin (the bridge is now built into serve.js)
 if(cfg.bridgeUrl === 'http://localhost:8124') cfg.bridgeUrl = '';
+cfg.cubeMode = false;   // 🧊 never boot INTO cube mode (avoids a confusing black boot) — persist only the calibration (cubePx/cubeXf/cubeYf/cubeMM)
 function saveCfg(){ LS.set('cfg', cfg); }
 /* ---- YouTube bridge AUTO-DISCOVERY (v76) -------------------------------------------------------
    A phone can't reach a localhost bridge, and a Cloudflare *quick* tunnel mints a NEW url every
@@ -6038,6 +6050,9 @@ let transStart = null, transPending = false;
 const TRANS_DUR = 0.42;
 // hologram pyramid: the final frame is captured here and re-tiled into 4 radial copies
 const _pyr = document.createElement('canvas'), _pyrc = _pyr.getContext('2d');
+// 🧊 CUBE MODE: the finished frame is captured here, then re-composited as a footprint square + pre-mirrored TIR bands
+const _cube = document.createElement('canvas'), _cubec = _cube.getContext('2d');
+let _cubeShownAt = 0, _cubePrevHud = false;
 // audio-warped feedback buffer (SOTA #5): snapshot of last frame, re-drawn zoomed/rotated by the music
 const _fb = document.createElement('canvas'), _fbc = _fb.getContext('2d');
 // mobile single-pass bloom buffer (1/4-res; bilinear downscale IS the blur)
@@ -6308,6 +6323,9 @@ function loop(){
     if(cfg.filmgrain) drawPostFX();   // SOTA #49: vignette + film grain + halation
     if(cfg.showFps) _pAdd('postfx', _ps);
   }
+
+  // 🧊 CUBE MODE: re-composite the finished frame as a footprint square + pre-mirrored TIR bands (byte-identical when off)
+  if(cfg.cubeMode){ try{ drawCubeMode(); }catch(_){} }
 
   // live level meter (composite loudness so the bar is lively)
   meterFill.style.width = Math.min(100, (playing ? (audioLevel*1.5 + audioBass*0.6) : 0) * 100) + '%';
@@ -6812,6 +6830,126 @@ $('connectOk') && $('connectOk').addEventListener('click', () => $('connectModal
 ['mcGlow','mcThick','mcDensity'].forEach(id => { const el = $(id); if(!el) return; el.addEventListener('input', () => { setRangeFill(el); const v = +el.value / 100; if(id === 'mcGlow') manualGlow = v; else if(id === 'mcThick') manualThick = v; else manualDensity = v; if(el._roSpan) el._roSpan.textContent = el.value; saveModeSettings(mode); }); });
 function reflectModeCtrls(){ [['mcGlow', manualGlow], ['mcThick', manualThick], ['mcDensity', manualDensity]].forEach(([id, v]) => { const el = $(id); if(el){ el.value = Math.round(v * 100); setRangeFill(el); if(el._roSpan) el._roSpan.textContent = el.value; } }); }
 $('setBtn') && $('setBtn').addEventListener('click', refreshCacheSize);
+
+/* ============================ 🧊 CUBE MODE ============================ */
+/* A physical glass cube placed on the phone screen: light entering its bottom refracts into a <=41.8deg cone;
+   rays hitting the side faces exceed the critical angle -> total internal reflection (light can never exit the
+   sides). Looking into the TOP face the viewer sees the direct footprint image PLUS TIR-folded mirrored copies
+   of the content beside/under the cube. So: render the live figure into a calibrated footprint square + a
+   pre-mirrored margin band, and the cube's own reflections compose a seamless kaleidoscopic hologram.
+   Default OFF -> byte-identical rendering. No template literals added (house rule). */
+function _cubePpm(){ return cfg.cubePxPerMM || (96/25.4*((window.devicePixelRatio)||1)); }   // CSS px per mm estimate (a label only; user pinches to match)
+function _cubeScale(){ return W / (canvas.clientWidth || W || 1); }                            // CSS px -> canvas-buffer px (handles LITE RES-downscale)
+function _cubePt(e){ const r = canvas.getBoundingClientRect(); return { x:(e.clientX - r.left)/(r.width||1)*W, y:(e.clientY - r.top)/(r.height||1)*H }; }
+function setCubePx(px){ const ppm=_cubePpm(); px = Math.max(5*ppm, Math.min(40*ppm, px)); cfg.cubePx = px; cfg.cubeMM = px/ppm; _cubeShownAt = performance.now(); }
+function stepCubeMM(d){ const ppm=_cubePpm(); let mm = Math.max(5, Math.min(40, (cfg.cubeMM||20) + d)); mm = Math.round(mm/0.5)*0.5; cfg.cubeMM = mm; cfg.cubePx = mm*ppm; _cubeShownAt = performance.now(); saveCfg(); haptic(); }
+function setCubeMode(on){
+  on = !!on; cfg.cubeMode = on;
+  const ppm=_cubePpm(); if(!cfg.cubePx || cfg.cubePx < 8) cfg.cubePx = (cfg.cubeMM||20)*ppm;   // lazy-init the square size on first use
+  const sw = $('swCubeMode'); if(sw) sw.classList.toggle('on', on);
+  const btn = $('cubeBtn'); if(btn) btn.classList.toggle('on', on);
+  document.body.classList.toggle('cube-mode', on);
+  if(on){
+    _cubePrevHud = $('ui').classList.contains('hud-hidden');
+    try{ closePanel('settingsPanel'); closePanel('playlistPanel'); closePanel('modesPanel'); }catch(_){}
+    setHud(true); _cubeShownAt = performance.now();
+    toast('place the cube on the square — drag to move, pinch to size, double-tap to exit. Max your screen brightness.', 'ok');
+  } else {
+    setHud(_cubePrevHud);
+  }
+  saveCfg(); haptic();
+}
+function drawCubeMode(){
+  const g = mainCtx; if(!g) return;
+  const ppm=_cubePpm(); if(!cfg.cubePx || cfg.cubePx < 8) cfg.cubePx = (cfg.cubeMM||20)*ppm;
+  if(_cube.width !== W || _cube.height !== H){ _cube.width = W; _cube.height = H; }
+  _cubec.globalCompositeOperation='source-over'; _cubec.clearRect(0,0,W,H);
+  try{ _cubec.drawImage(mainCtx.canvas, 0, 0); }catch(_){ return; }                              // snapshot the finished frame
+  const S  = Math.max(8, Math.min(Math.min(W,H)*0.98, cfg.cubePx * _cubeScale()));                // footprint square side in buffer px
+  const cx = clamp01(cfg.cubeXf)*W, cy = clamp01(cfg.cubeYf)*H;
+  const ss = Math.min(W,H), sx=(W-ss)/2, sy=(H-ss)/2;                                             // central square crop of the source (cube footprint is square, undistorted)
+  g.globalCompositeOperation='source-over'; g.globalAlpha=1;
+  g.fillStyle='#000'; g.fillRect(0,0,W,H);                                                        // everything else stays black
+  // pre-mirrored TIR bands: 3x3 mirror tiling around the square (width = 1.0x square each side); skip center
+  g.globalAlpha=0.85;
+  for(let gy=-1; gy<=1; gy++) for(let gx=-1; gx<=1; gx++){
+    if(gx===0 && gy===0) continue;
+    g.save();
+    g.translate(cx + gx*S, cy + gy*S);
+    g.scale(gx!==0?-1:1, gy!==0?-1:1);                                                            // odd cell -> mirror on that axis (seamless fold at each boundary)
+    try{ g.drawImage(_cube, sx,sy,ss,ss, -S/2,-S/2, S,S); }catch(_){}
+    g.restore();
+  }
+  // primary footprint square (full brightness, drawn on top so the direct view stays primary)
+  g.globalAlpha=1; g.save(); g.translate(cx,cy);
+  try{ g.drawImage(_cube, sx,sy,ss,ss, -S/2,-S/2, S,S); }catch(_){}
+  g.restore();
+  // mild white-boost so fine lines carry through the glass — single extra 'lighter' pass (guarded against white-out)
+  g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha=0.5; g.translate(cx,cy);
+  try{ g.drawImage(_cube, sx,sy,ss,ss, -S/2,-S/2, S,S); }catch(_){}
+  g.restore();
+  g.globalCompositeOperation='source-over'; g.globalAlpha=1;
+  // calibration outline: fades out over 5s after entering / any interaction, so it doesn't pollute the show
+  const age = (performance.now() - (_cubeShownAt||0))/1000;
+  if(age < 5){
+    g.save(); g.globalAlpha = Math.max(0, 1 - age/5)*0.9; g.strokeStyle='#fff'; g.lineWidth=1;
+    g.strokeRect(Math.round(cx - S/2)+0.5, Math.round(cy - S/2)+0.5, Math.round(S), Math.round(S));
+    g.restore(); g.globalAlpha=1;
+  }
+}
+// ---- cube-mode pointer control: registered on WINDOW at capture phase so it pre-empts the canvas gesture / HUD-reveal
+//      handlers (those are at-target/bubble on the canvas; a window-capture stopPropagation halts the event before it
+//      reaches them). When cube mode is OFF these listeners return immediately -> no behavior change. ----
+let _cubeDrag=null, _cubeMoved=false, _cubeDownX=0, _cubeDownY=0, _cubeLastTapT=0, _cubePinchBase=0, _cubePxBase=0;
+const _cubePtrs = new Map();
+function _cubeInCtl(e){ return !!(e.target && e.target.closest && e.target.closest('#cubeCtl')); }   // let the -/+ buttons work normally
+window.addEventListener('pointerdown', e => {
+  if(!cfg.cubeMode || _cubeInCtl(e)) return;
+  e.stopPropagation();
+  const pt=_cubePt(e); _cubePtrs.set(e.pointerId, pt); _cubeShownAt=performance.now();
+  if(_cubePtrs.size===1){
+    const S=Math.max(8, cfg.cubePx*_cubeScale()), cx=clamp01(cfg.cubeXf)*W, cy=clamp01(cfg.cubeYf)*H;
+    const inSq = Math.abs(pt.x-cx)<=S/2 && Math.abs(pt.y-cy)<=S/2;
+    _cubeDrag={ id:e.pointerId, ox: inSq?pt.x-cx:0, oy: inSq?pt.y-cy:0 };                          // grab-offset inside the square; else the square jumps to the finger
+    _cubeMoved=false; _cubeDownX=pt.x; _cubeDownY=pt.y;
+  } else if(_cubePtrs.size===2){
+    _cubeDrag=null; _cubeMoved=true;
+    const p=[..._cubePtrs.values()]; _cubePinchBase=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y)||1; _cubePxBase=cfg.cubePx;
+  }
+}, true);
+window.addEventListener('pointermove', e => {
+  if(!cfg.cubeMode || !_cubePtrs.has(e.pointerId)) return;
+  e.stopPropagation();
+  const pt=_cubePt(e); _cubePtrs.set(e.pointerId, pt); _cubeShownAt=performance.now();
+  if(_cubePtrs.size>=2){
+    const p=[..._cubePtrs.values()]; const d=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y)||1;
+    setCubePx(_cubePxBase * (d/_cubePinchBase)); _cubeMoved=true;
+  } else if(_cubeDrag && _cubeDrag.id===e.pointerId){
+    cfg.cubeXf = clamp01((pt.x - _cubeDrag.ox)/W); cfg.cubeYf = clamp01((pt.y - _cubeDrag.oy)/H);
+    if(Math.hypot(pt.x-_cubeDownX, pt.y-_cubeDownY) > 6*_cubeScale()) _cubeMoved=true;
+  }
+}, true);
+function _cubeUp(e){
+  if(!cfg.cubeMode || !_cubePtrs.has(e.pointerId)) return;
+  e.stopPropagation();
+  _cubePtrs.delete(e.pointerId);
+  const wasTap = !!(_cubeDrag && _cubeDrag.id===e.pointerId && !_cubeMoved);
+  if(_cubeDrag && _cubeDrag.id===e.pointerId) _cubeDrag=null;
+  if(wasTap && _cubePtrs.size===0){                                                                // double-tap anywhere -> exit
+    const now=performance.now();
+    if(now - _cubeLastTapT < 340){ _cubeLastTapT=0; setCubeMode(false); return; }
+    _cubeLastTapT = now;
+  }
+  saveCfg();
+}
+window.addEventListener('pointerup', _cubeUp, true);
+window.addEventListener('pointercancel', _cubeUp, true);
+// wiring: settings toggle mirrors the transport button; the -/+ buttons step the size
+bindSw('swCubeMode', 'cubeMode', on => setCubeMode(on));
+$('cubeBtn') && $('cubeBtn').addEventListener('click', () => setCubeMode(!cfg.cubeMode));
+$('cubeMinus') && $('cubeMinus').addEventListener('click', () => stepCubeMM(-0.5));
+$('cubePlus') && $('cubePlus').addEventListener('click', () => stepCubeMM(0.5));
+
 bindSw('swXfade', 'xfade'); bindSw('swMono', 'mono'); bindSw('swCycle', 'autocycle', () => autocycleT = t);
 bindSw('swStrobe', 'strobe'); bindSw('swParticles', 'particles'); bindSw('swFeedback', 'feedback'); bindSw('swShock', 'shockwave'); bindSw('swGrain', 'filmgrain'); bindSw('swBeamburst', 'beamburst'); bindSw('swCam', 'camera', on => on ? startCam() : stopCam());
 // SOTA Wave 5 toggles
@@ -7067,7 +7205,7 @@ function applyCfgToUI(){
   document.body.classList.toggle('reduce', cfg.reduce);
   [['setVol','volume'],['setPlayRate','playRate'],['setBass','bassGain'],['setMid','midGain'],['setTreble','trebleGain'],['setBeat','beatThresh'],['setSym','symmetry'],['setBlendMix','blendMix'],['setBlendScale','blendScale'],['setSat','sat'],['setLight','light'],['setCustomHue','customHue'],['setCustomSpread','customSpread'],['setBlendHue','blendHue'],['setTrail','trail'],['setPyrSides','pyramidSides'],['setCycleMins','cycleMins'],['setTransMs','transMs'],['setSpinSpeed','spinSpeed'],['setCymIntensity','cymIntensity'],['setCymTessSpeed','cymTessSpeed'],['setCymSpin','cymSpin'],['setCymDisc','cymDisc'],['setCymDepth','cymDepth'],['setCymPunch','cymPunch'],['setCymSync','cymSync'],['setCymLead','cymLead'],['setCymScanCap','cymScanCap'],['setCymLaserPower','cymLaserPower'],['setCymGnosisHold','cymGnosisHold']]
     .forEach(([id, key]) => { const el = $(id); if(el){ el.value = cfg[key]; setRangeFill(el); } });
-  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymSongDNA','cymSongDNA'],['swCymGnosis','cymGnosis'],['swCymDNAv2','cymDNAv2'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse']]
+  [['swRefract','refract'],['swTrans','transitions'],['swBlend','blend'],['swPyramid','pyramid'],['swPyrSpin','pyramidSpin'],['swAutoVJ','autoVJ'],['swXfade','xfade'],['swMono','mono'],['swCycle','autocycle'],['swStrobe','strobe'],['swParticles','particles'],['swFeedback','feedback'],['swShock','shockwave'],['swGrain','filmgrain'],['swBeamburst','beamburst'],['swLfo','lfo'],['swCam','camera'],['swHaptic','haptics'],['swWake','wake'],['swAutohide','autohide'],['swBig','big'],['swReduce','reduce'],['swAdaptiveQ','adaptiveQ'],['swShowFps','showFps'],['swFullGlow','fullGlow'],['swBlendReverse','blendReverse'],['swDuck','duck'],['swAudioSym','audioSym'],['swBeatSnap','beatSnap'],['swKinetic','kinetic'],['swKeyColor','keyColor'],['swHpss','hpss'],['swWarpMesh','warpMesh'],['swParallax','parallax'],['swGlitch','glitch'],['swFlow','flow'],['swGenesis','genesis'],['swCymFreqColor','cymFreqColor'],['swCymBrain','cymBrain'],['swCymTesseract','cymTesseract'],['swCymTessSpin','cymTessSpin'],['swCymBloom','cymBloom'],['swCymPalette','cymPalette'],['swCymPureSpectrum','cymPureSpectrum'],['swCymLaser','cymLaser'],['swCymLaserGalvo','cymLaserGalvo'],['swCymSongDNA','cymSongDNA'],['swCymGnosis','cymGnosis'],['swCymDNAv2','cymDNAv2'],['swCymDepthDyn','cymDepthDyn'],['swCymFuse','cymFuse'],['swCubeMode','cubeMode']]
     .forEach(([id, key]) => { const el = $(id); if(el) el.classList.toggle('on', !!cfg[key]); });
   // Cymatic sub-mode is not a boolean cfg key — reconcile from cfg.genMode and re-assert genesis mode on boot.
   { const onC = cfg.genMode === 'cymatic' && cfg.genesis;   // AUDIT Step 2: respect the persisted genesis toggle — boot only re-asserts genesis if it was LEFT on (genMode alone stuck the app in genesis forever, the v79 regression)
@@ -7134,7 +7272,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v81';
+const APP_VERSION = 'v82';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
