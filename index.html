@@ -1808,7 +1808,11 @@ function glProg(key, fragBody){
 }
 function glResize(){
   const genActive = (typeof mode!=='undefined' && mode==='genesis');
-  const cap = LITE ? (genActive ? 540 : 900) : (genActive ? 1100 : 1280);   // GENESIS caps harder (per-pixel neural field)
+  let cap = LITE ? (genActive ? 540 : 900) : (genActive ? 1100 : 1280);   // GENESIS caps harder (per-pixel neural field)
+  // 🧊 cube-mode PERF: only a ~3x-square patch of the figure is visible, so the per-pixel pattern
+  // shaders only need ~3.2x the square's CSS size (~6-10x fewer GL pixels on a phone). The main
+  // canvas stays full-res, so the footprint square keeps its sharpness.
+  if(cfg.cubeMode && cfg.cubePx) cap = Math.min(cap, Math.max(160, cfg.cubePx*3.2));
   const longest=Math.max(W,H), sc=Math.min(1, cap/longest) * (cfg.adaptiveQ ? Math.max(0.5,qScale) : 1);
   const w=Math.max(16,(W*sc)|0), h=Math.max(16,(H*sc)|0);
   if(w!==_glw||h!==_glh){ _glw=w; _glh=h; _glcv.width=w; _glcv.height=h; }
@@ -7272,7 +7276,7 @@ if(isIOS && !isStandalone){
 }
 
 /* ============================ service worker ============================ */
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 let _swReg = null;
 if('serviceWorker' in navigator){
   // updateViaCache:'none' → the browser always re-fetches sw.js fresh on every check (never an HTTP-cached stale SW)
